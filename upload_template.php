@@ -32,247 +32,319 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
 function generatePreviewImage($god_image, $god_name, $biodata, $family_details, $contact_details, $background_image, $photo)
 {
+    // Constants
     $width = 794;
     $height = 1123;
     $padding_left_right = 90;
     $padding_top_bottom = 30;
-    $content_width = $width - 2 * $padding_left_right;
-    $content_height = $height - 2 * $padding_top_bottom;
+    $reserved_top_area = 150; // Fixed reserved space at top
 
+    // Create canvas and load background
     $canvas = imagecreatetruecolor($width, $height);
     $bg = loadImage('assets/images/' . $background_image);
-    if (!$bg) die("Error: Failed to load background image.");
-    $bg_width = imagesx($bg);
-    $bg_height = imagesy($bg);
-    $bg_ratio = $bg_width / $bg_height;
-    $canvas_ratio = $width / $height;
-    if ($bg_ratio > $canvas_ratio) {
-        $new_bg_height = $height;
-        $new_bg_width = (int)($bg_ratio * $height);
-    } else {
-        $new_bg_width = $width;
-        $new_bg_height = (int)($width / $bg_ratio);
-    }
-    imagecopyresampled($canvas, $bg, 0, 0, 0, 0, (int)$new_bg_width, (int)$new_bg_height, $bg_width, $bg_height);
+    if (!$bg) die("Error loading background image");
+
+    // Fill canvas with background
+    imagecopyresampled($canvas, $bg, 0, 0, 0, 0, $width, $height, imagesx($bg), imagesy($bg));
     imagedestroy($bg);
 
+    // Place god image in reserved area if exists
+    $current_y = $padding_top_bottom;
+    if ($god_image) {
+        $god_img = loadImage('assets/images/' . $god_image);
+        if ($god_img) {
+            $max_width = 100;
+            $max_height = 100;
+            $orig_width = imagesx($god_img);
+            $orig_height = imagesy($god_img);
+
+            // Calculate aspect ratio
+            $ratio = min($max_width / $orig_width, $max_height / $orig_height);
+            $new_width = (int)($orig_width * $ratio);
+            $new_height = (int)($orig_height * $ratio);
+
+            // Center in reserved area
+            $x = (int)(($width - $new_width) / 2);
+            $y = $padding_top_bottom + (int)(($reserved_top_area - $new_height) / 2);
+            imagecopyresampled($canvas, $god_img, $x, $y, 0, 0, $new_width, $new_height, $orig_width, $orig_height);
+            imagedestroy($god_img);
+        }
+    }
+
+    // Start content below reserved area
+    $current_y = $padding_top_bottom + $reserved_top_area + 20;
+    $max_content_height = $height - $padding_top_bottom - $reserved_top_area - $padding_top_bottom;
+
+    // Prepare fonts and colors
     $font_regular = 'C:/Windows/Fonts/times.ttf';
     $font_bold = 'C:/Windows/Fonts/timesbd.ttf';
     $black = imagecolorallocate($canvas, 0, 0, 0);
-    $default_font_size = 10;
-    $current_y = $padding_top_bottom;
 
-    // Calculate total height and scale if necessary
-    $total_height = 0;
-    $god_height = $god_image ? 115 : 0; // God image height + spacing
-    $god_name_height = 36; // God name size + spacing
-    $biodata_height = calculateSectionHeight(json_decode($biodata, true), $default_font_size, $font_regular, $content_width);
-    $family_height = calculateSectionHeight(json_decode($family_details, true), $default_font_size, $font_regular, $content_width);
-    $contact_height = $contact_details ? calculateSectionHeight(json_decode($contact_details, true), $default_font_size, $font_regular, $content_width) : 0;
-    $total_height = $god_height + $god_name_height + $biodata_height + $family_height + $contact_height;
+    // Initial font sizes
+    $base_font_size = 10;
+    $god_name_size = 16;
+    $title_size = 14;
 
-    $scale = $total_height > $content_height ? $content_height / $total_height : 1;
-    $default_font_size *= $scale;
-    $god_name_size = 16 * $scale;
-    $title_size = 14 * $scale;
-    $god_width = $god_image ? 100 * $scale : 0;
-    $god_height = $god_image ? 100 * $scale : 0;
-    $person_width = $photo ? 130 * $scale : 0;
-    $person_height = $photo ? 173 * $scale : 0;
+    // Calculate content heights
+    $content_width = $width - 2 * $padding_left_right;
+    $elements_height = 0;
 
-    if ($god_image) {
-        $god_img = loadImage('assets/images/' . $god_image);
-        if (!$god_img) die("Error: Failed to load god image.");
-        $god_x = (int)(($width - $god_width) / 2);
-        imagecopyresampled($canvas, $god_img, $god_x, $current_y, 0, 0, $god_width, $god_height, imagesx($god_img), imagesy($god_img));
-        imagedestroy($god_img);
-        $current_y += $god_height + 15 * $scale;
+    // God name height
+    $elements_height += $god_name_size + 20;
+
+    // Biodata height
+    $biodata_data = json_decode($biodata, true);
+    $biodata_height = calculateSectionHeight($biodata_data, $base_font_size, $font_regular, $content_width);
+    $elements_height += $biodata_height;
+
+    // Family details height
+    $family_data = json_decode($family_details, true);
+    $family_height = calculateSectionHeight($family_data, $base_font_size, $font_regular, $content_width);
+    $elements_height += $family_height;
+
+    // Contact details height
+    $contact_height = 0;
+    if ($contact_details) {
+        $contact_data = json_decode($contact_details, true);
+        $contact_height = calculateSectionHeight($contact_data, $base_font_size, $font_regular, $content_width);
+        $elements_height += $contact_height;
     }
 
+    // Calculate scaling factor
+    $scale = 1;
+    if ($elements_height > $max_content_height) {
+        $scale = $max_content_height / $elements_height;
+    }
+
+    // Apply scaling
+    $base_font_size *= $scale;
+    $god_name_size *= $scale;
+    $title_size *= $scale;
+    $line_height = 15 * $scale;
+    $text_section_width = $content_width * 0.7;
+
+    // Draw god name
+    $current_y = $padding_top_bottom + $reserved_top_area + 20;
     $god_name_box = imagettfbbox($god_name_size, 0, $font_bold, $god_name);
-    $god_name_width = $god_name_box[2] - $god_name_box[0];
-    imagettftext($canvas, $god_name_size, 0, (int)(($width - $god_name_width) / 2), $current_y, $black, $font_bold, $god_name);
-    $god_name_y = $current_y;
-    $current_y += 20 * $scale;
+    $god_name_x = (int)(($width - ($god_name_box[2] - $god_name_box[0])) / 2);
+    imagettftext($canvas, $god_name_size, 0, $god_name_x, $current_y, $black, $font_bold, $god_name);
+    $current_y += $god_name_size + 20 * $scale;
 
-    $text_area_width = (int)(0.7 * $content_width);
-    $photo_area_x = $padding_left_right + $text_area_width + 20 * $scale;
+    // Draw biodata
+    $current_y = drawSection(
+        $canvas,
+        'Biodata',
+        $biodata_data,
+        $current_y,
+        $title_size,
+        $base_font_size,
+        $font_bold,
+        $font_regular,
+        $padding_left_right,
+        $text_section_width,
+        $line_height,
+        $black,
+        $scale
+    );
 
-    $biodata_title = "Biodata";
-    $title_box = imagettfbbox($title_size, 0, $font_bold, $biodata_title);
-    $title_width = $title_box[2] - $title_box[0];
-    $current_y += 8 * $scale;
-    imagettftext($canvas, $title_size, 0, (int)(($width - $title_width) / 2), $current_y, $black, $font_bold, $biodata_title);
-    $current_y += 25 * $scale;
+    // Draw family details
+    $current_y = drawSection(
+        $canvas,
+        'Family Details',
+        $family_data,
+        $current_y,
+        $title_size,
+        $base_font_size,
+        $font_bold,
+        $font_regular,
+        $padding_left_right,
+        $text_section_width,
+        $line_height,
+        $black,
+        $scale
+    );
 
-    $biodata = json_decode($biodata, true);
-    $max_key_width = 0;
-    foreach ($biodata as $key => $value) {
-        $key_text = $key . ":";
-        $key_box = imagettfbbox($default_font_size, 0, $font_regular, $key_text);
-        $max_key_width = max($max_key_width, $key_box[2] - $key_box[0]);
-    }
-    foreach ($biodata as $key => $value) {
-        $key_text = $key . ":";
-        imagettftext($canvas, $default_font_size, 0, $padding_left_right, $current_y, $black, $font_regular, $key_text);
-        $value_x = $padding_left_right + $max_key_width + 10 * $scale;
-        $lines = wrapText($value, $text_area_width - $max_key_width - 10 * $scale, $font_regular, $default_font_size, $canvas, $black, $value_x, $current_y, $height - $padding_top_bottom, $scale);
-        $current_y += count($lines) * 15 * $scale;
-    }
-
-    if ($current_y + 40 * $scale < $height - $padding_top_bottom) {
-        $family_title = "Family Details";
-        $title_box = imagettfbbox($title_size, 0, $font_bold, $family_title);
-        $title_width = $title_box[2] - $title_box[0];
-        $current_y += 5 * $scale;
-        imagettftext($canvas, $title_size, 0, (int)(($width - $title_width) / 2), $current_y, $black, $font_bold, $family_title);
-        $current_y += 25 * $scale;
-        $family_details = json_decode($family_details, true);
-        $max_key_width = 0;
-        foreach ($family_details as $key => $value) {
-            $key_text = $key . ":";
-            $key_box = imagettfbbox($default_font_size, 0, $font_regular, $key_text);
-            $max_key_width = max($max_key_width, $key_box[2] - $key_box[0]);
-        }
-        foreach ($family_details as $key => $value) {
-            $key_text = $key . ":";
-            imagettftext($canvas, $default_font_size, 0, $padding_left_right, $current_y, $black, $font_regular, $key_text);
-            $value_x = $padding_left_right + $max_key_width + 10 * $scale;
-            $lines = wrapText($value, $text_area_width - $max_key_width - 10 * $scale, $font_regular, $default_font_size, $canvas, $black, $value_x, $current_y, $height - $padding_top_bottom, $scale);
-            $current_y += count($lines) * 15 * $scale;
-        }
-    }
-
-    if ($contact_details && $current_y + 40 * $scale < $height - $padding_top_bottom) {
-        $contact_title = "Contact Details";
-        $title_box = imagettfbbox($title_size, 0, $font_bold, $contact_title);
-        $title_width = $title_box[2] - $title_box[0];
-        $current_y += 5 * $scale;
-        imagettftext($canvas, $title_size, 0, (int)(($width - $title_width) / 2), $current_y, $black, $font_bold, $contact_title);
-        $current_y += 25 * $scale;
-        $contact_details = json_decode($contact_details, true);
-        $max_key_width = 0;
-        foreach ($contact_details as $key => $value) {
-            $key_text = $key . ":";
-            $key_box = imagettfbbox($default_font_size, 0, $font_regular, $key_text);
-            $max_key_width = max($max_key_width, $key_box[2] - $key_box[0]);
-        }
-        foreach ($contact_details as $key => $value) {
-            $key_text = $key . ":";
-            imagettftext($canvas, $default_font_size, 0, $padding_left_right, $current_y, $black, $font_regular, $key_text);
-            $value_x = $padding_left_right + $max_key_width + 10 * $scale;
-            $lines = wrapText($value, $text_area_width - $max_key_width - 10 * $scale, $font_regular, $default_font_size, $canvas, $black, $value_x, $current_y, $height - $padding_top_bottom, $scale);
-            $current_y += count($lines) * 15 * $scale;
-        }
+    // Draw contact details if exists
+    if ($contact_details) {
+        $current_y = drawSection(
+            $canvas,
+            'Contact Details',
+            $contact_data,
+            $current_y,
+            $title_size,
+            $base_font_size,
+            $font_bold,
+            $font_regular,
+            $padding_left_right,
+            $text_section_width,
+            $line_height,
+            $black,
+            $scale
+        );
     }
 
+    // Add person photo if exists
     if ($photo) {
-        $person_img = loadImage('assets/images/' . $photo);
-        if (!$person_img) die("Error: Failed to load person photo.");
-        $person_x = (int)$photo_area_x;
-        $person_y = $god_name_y + 20 * $scale;
-        $img_width = imagesx($person_img);
-        $img_height = imagesy($person_img);
-        $img_ratio = $img_width / $img_height;
-        $target_ratio = $person_width / $person_height;
-        if ($img_ratio > $target_ratio) {
-            $crop_width = (int)($img_height * $target_ratio);
-            $crop_x = (int)(($img_width - $crop_width) / 2);
-            $crop_y = 0;
-            $crop_height = $img_height;
-        } else {
-            $crop_height = (int)($img_width / $target_ratio);
-            $crop_y = (int)(($img_height - $crop_height) / 2);
-            $crop_x = 0;
-            $crop_width = $img_width;
+        $photo_path = 'assets/images/' . $photo;
+        $person_img = loadImage($photo_path);
+        if ($person_img) {
+            $target_width = 130 * $scale;
+            $target_height = 173 * $scale;
+
+            // Calculate position
+            $photo_x = $width - $padding_left_right - $target_width;
+            $photo_y = $padding_top_bottom + $reserved_top_area + 20;
+
+            imagecopyresampled(
+                $canvas,
+                $person_img,
+                $photo_x,
+                $photo_y,
+                0,
+                0,
+                $target_width,
+                $target_height,
+                imagesx($person_img),
+                imagesy($person_img)
+            );
+            imagedestroy($person_img);
         }
-        imagecopyresampled($canvas, $person_img, $person_x, $person_y, $crop_x, $crop_y, $person_width, $person_height, $crop_width, $crop_height);
-        imagedestroy($person_img);
     }
 
-    $preview_path = 'previews/template' . time() . '_preview.png';
+    // Save preview
+    $preview_path = 'previews/template_' . time() . '.png';
     imagepng($canvas, 'assets/images/' . $preview_path);
     imagedestroy($canvas);
+
     return $preview_path;
 }
 
-function loadImage($path)
-{
-    $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-    switch ($extension) {
-        case 'jpg':
-        case 'jpeg':
-            return imagecreatefromjpeg($path);
-        case 'png':
-            return imagecreatefrompng($path);
-        default:
-            return false;
+function drawSection(
+    $canvas,
+    $title,
+    $data,
+    $current_y,
+    $title_size,
+    $font_size,
+    $font_bold,
+    $font_regular,
+    $padding,
+    $text_width,
+    $line_height,
+    $color,
+    $scale
+) {
+    // Draw section title
+    $title_box = imagettfbbox($title_size, 0, $font_bold, $title);
+    $title_x = (int)((794 - ($title_box[2] - $title_box[0])) / 2);
+    imagettftext($canvas, $title_size, 0, $title_x, $current_y, $color, $font_bold, $title);
+    $current_y += $title_size + 15 * $scale;
+
+    // Calculate max key width
+    $max_key_width = 0;
+    foreach ($data as $key => $value) {
+        $box = imagettfbbox($font_size, 0, $font_regular, $key . ': ');
+        $max_key_width = max($max_key_width, $box[2] - $box[0]);
     }
+
+    // Draw key-value pairs
+    foreach ($data as $key => $value) {
+        $key_x = $padding;
+        imagettftext($canvas, $font_size, 0, $key_x, $current_y, $color, $font_regular, $key . ':');
+
+        $value_x = $padding + $max_key_width + 10 * $scale;
+        $lines = wrapText($value, $text_width - $max_key_width - 10 * $scale, $font_regular, $font_size, $canvas, $color, $value_x, $current_y, $line_height, $scale);
+
+        $current_y += count($lines) * $line_height;
+    }
+
+    return $current_y + 20 * $scale;
 }
 
-function wrapText($text, $max_width, $font, $font_size, &$canvas, &$black, $x, &$y, $max_height, $scale)
+function wrapText($text, $max_width, $font, $font_size, $canvas, $color, $x, $y, $line_height, $scale)
 {
-    $adjusted_font_size = $font_size;
-    if (strlen($text) > 50) {
-        $adjusted_font_size = max(6 * $scale, $font_size - (strlen($text) - 50) / 20);
-    }
     $words = explode(' ', $text);
     $lines = [];
     $current_line = '';
-    $line_height = 15 * $scale;
+    $current_font_size = $font_size;
 
     foreach ($words as $word) {
-        $test_line = $current_line . ($current_line ? ' ' : '') . $word;
-        $box = imagettfbbox($adjusted_font_size, 0, $font, $test_line);
-        $width = $box[2] - $box[0];
-        if ($width > $max_width && $current_line) {
-            $lines[] = $current_line;
-            $current_line = $word;
-        } else {
+        $test_line = $current_line ? $current_line . ' ' . $word : $word;
+        $box = imagettfbbox($current_font_size, 0, $font, $test_line);
+        $text_width = $box[2] - $box[0];
+
+        // Reduce font size if needed
+        while ($text_width > $max_width && $current_font_size > 6 * $scale) {
+            $current_font_size -= 0.5;
+            $box = imagettfbbox($current_font_size, 0, $font, $test_line);
+            $text_width = $box[2] - $box[0];
+        }
+
+        if ($text_width <= $max_width) {
             $current_line = $test_line;
+        } else {
+            if ($current_line) $lines[] = $current_line;
+            $current_line = $word;
         }
     }
-    if ($current_line) {
-        $lines[] = $current_line;
+    if ($current_line) $lines[] = $current_line;
+
+    // Draw lines with adjusted font size
+    foreach ($lines as $line) {
+        imagettftext($canvas, $current_font_size, 0, $x, $y, $color, $font, $line);
+        $y += $line_height;
     }
 
-    $total_height = count($lines) * $line_height;
-    if ($y + $total_height <= $max_height) {
-        foreach ($lines as $line) {
-            imagettftext($canvas, $adjusted_font_size, 0, $x, $y, $black, $font, $line);
-            $y += $line_height;
-        }
-    }
     return $lines;
 }
 
 function calculateSectionHeight($data, $font_size, $font, $content_width)
 {
-    $height = 30; // Title + spacing
+    $height = 30;
     $max_key_width = 0;
+
     foreach ($data as $key => $value) {
-        $key_box = imagettfbbox($font_size, 0, $font, $key . ":");
-        $max_key_width = max($max_key_width, $key_box[2] - $key_box[0]);
+        $box = imagettfbbox($font_size, 0, $font, $key . ':');
+        $max_key_width = max($max_key_width, $box[2] - $box[0]);
     }
-    $text_width = (int)(0.7 * $content_width) - $max_key_width - 10;
+
+    $text_width = $content_width - $max_key_width - 10;
     foreach ($data as $value) {
-        $words = explode(' ', $value);
-        $lines = [];
-        $current_line = '';
-        foreach ($words as $word) {
-            $test_line = $current_line . ($current_line ? ' ' : '') . $word;
-            $box = imagettfbbox($font_size, 0, $font, $test_line);
-            if (($box[2] - $box[0]) > $text_width && $current_line) {
-                $lines[] = $current_line;
-                $current_line = $word;
-            } else {
-                $current_line = $test_line;
-            }
-        }
-        if ($current_line) $lines[] = $current_line;
+        $lines = wrapTextForHeightCalc($value, $text_width, $font, $font_size);
         $height += count($lines) * 15;
     }
     return $height;
+}
+
+function wrapTextForHeightCalc($text, $max_width, $font, $font_size)
+{
+    $words = explode(' ', $text);
+    $lines = [];
+    $current_line = '';
+
+    foreach ($words as $word) {
+        $test_line = $current_line ? $current_line . ' ' . $word : $word;
+        $box = imagettfbbox($font_size, 0, $font, $test_line);
+        if (($box[2] - $box[0]) > $max_width) {
+            if ($current_line) $lines[] = $current_line;
+            $current_line = $word;
+        } else {
+            $current_line = $test_line;
+        }
+    }
+    if ($current_line) $lines[] = $current_line;
+    return $lines;
+}
+
+function loadImage($path)
+{
+    $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+    if ($ext === 'jpg' || $ext === 'jpeg') {
+        return imagecreatefromjpeg($path);
+    } elseif ($ext === 'png') {
+        return imagecreatefrompng($path);
+    }
+    return false;
 }
 ?>
 
@@ -299,26 +371,123 @@ function calculateSectionHeight($data, $font_size, $font, $content_width)
                 <input type="text" name="god_name" class="form-control" required>
             </div>
             <h3>Biodata</h3>
-            <?php foreach (['Full Name', 'Date of Birth', 'Place of Birth', 'Religion', 'Caste', 'Kuldivat', 'Zodiac Sign', 'Constellation', 'Clan', 'Pulse', 'Manglik', 'Tribe', 'Height', 'Character', 'Blood Type', 'Job/Business', 'Education', 'Salary/Income'] as $field): ?>
-                <div class="mb-3">
-                    <label><?php echo $field; ?>:</label>
-                    <input type="text" name="biodata[<?php echo $field; ?>]" class="form-control" required>
-                </div>
-            <?php endforeach; ?>
+            <div class="mb-3">
+                <label>Full Name:</label>
+                <input type="text" name="biodata[Full Name]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Date of Birth:</label>
+                <input type="text" name="biodata[Date of Birth]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Place of Birth:</label>
+                <input type="text" name="biodata[Place of Birth]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Religion:</label>
+                <input type="text" name="biodata[Religion]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Caste:</label>
+                <input type="text" name="biodata[Caste]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Kuldivat:</label>
+                <input type="text" name="biodata[Kuldivat]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Zodiac Sign:</label>
+                <input type="text" name="biodata[Zodiac Sign]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Constellation:</label>
+                <input type="text" name="biodata[Constellation]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Clan:</label>
+                <input type="text" name="biodata[Clan]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Pulse:</label>
+                <input type="text" name="biodata[Pulse]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Manglik:</label>
+                <input type="text" name="biodata[Manglik]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Tribe:</label>
+                <input type="text" name="biodata[Tribe]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Height:</label>
+                <input type="text" name="biodata[Height]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Character:</label>
+                <input type="text" name="biodata[Character]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Blood Type:</label>
+                <input type="text" name="biodata[Blood Type]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Job/Business:</label>
+                <input type="text" name="biodata[Job/Business]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Education:</label>
+                <input type="text" name="biodata[Education]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Salary/Income:</label>
+                <input type="text" name="biodata[Salary/Income]" class="form-control" required>
+            </div>
+
             <h3>Family Details</h3>
-            <?php foreach (['Father\'s Name', 'Father\'s Profession', 'Mother\'s Name', 'Mother\'s Profession', 'Sister', 'Brother', 'Uncle', 'Relationship'] as $field): ?>
-                <div class="mb-3">
-                    <label><?php echo $field; ?>:</label>
-                    <input type="text" name="family_details[<?php echo $field; ?>]" class="form-control" required>
-                </div>
-            <?php endforeach; ?>
+            <div class="mb-3">
+                <label>Father's Name:</label>
+                <input type="text" name="family_details[Father's Name]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Father's Profession:</label>
+                <input type="text" name="family_details[Father's Profession]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Mother's Name:</label>
+                <input type="text" name="family_details[Mother's Name]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Mother's Profession:</label>
+                <input type="text" name="family_details[Mother's Profession]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Sister:</label>
+                <input type="text" name="family_details[Sister]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Brother:</label>
+                <input type="text" name="family_details[Brother]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Uncle:</label>
+                <input type="text" name="family_details[Uncle]" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Relationship:</label>
+                <input type="text" name="family_details[Relationship]" class="form-control" required>
+            </div>
+
             <h3>Contact Details (optional)</h3>
-            <?php foreach (['Address', 'Mobile Number'] as $field): ?>
-                <div class="mb-3">
-                    <label><?php echo $field; ?>:</label>
-                    <input type="text" name="contact_details[<?php echo $field; ?>]" class="form-control">
-                </div>
-            <?php endforeach; ?>
+            <div class="mb-3">
+                <label>Address:</label>
+                <input type="text" name="contact_details[Address]" class="form-control">
+            </div>
+            <div class="mb-3">
+                <label>Mobile Number:</label>
+                <input type="text" name="contact_details[Mobile Number]" class="form-control">
+            </div>
+
             <div class="mb-3">
                 <label>Background Image:</label>
                 <input type="file" name="background_image" class="form-control" required>
