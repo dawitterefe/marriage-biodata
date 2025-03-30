@@ -1,4 +1,5 @@
 <?php
+session_start(); // Start session for user identification
 include 'config/db.php';
 
 try {
@@ -27,7 +28,6 @@ try {
             --text-light: #fff;
         }
 
-        /* Navbar */
         .navbar-custom {
             background: var(--gradient-primary);
         }
@@ -42,7 +42,6 @@ try {
             color: #d0e8ff;
         }
 
-        /* Header */
         header {
             background: var(--gradient-primary);
             position: relative;
@@ -109,7 +108,6 @@ try {
             }
         }
 
-        /* Section Header */
         .section-header {
             background: var(--gradient-accent);
             padding: 2rem;
@@ -119,7 +117,6 @@ try {
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
         }
 
-        /* Template Card */
         .template-card {
             transition: all 0.3s ease;
             border: none;
@@ -133,7 +130,6 @@ try {
             box-shadow: 0 15px 30px rgba(78, 84, 200, 0.2);
         }
 
-        /* Buttons */
         .btn-primary {
             background: var(--gradient-primary);
             border: none;
@@ -147,13 +143,11 @@ try {
             box-shadow: 0 5px 15px rgba(78, 84, 200, 0.3);
         }
 
-        /* Smaller View Design Button */
         .btn-sm {
             padding: 0.4rem 1rem;
             font-size: 0.875rem;
         }
 
-        /* Info Cards */
         .info-card {
             background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
             border: none;
@@ -168,7 +162,6 @@ try {
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
         }
 
-        /* Information Section Enhancements */
         .container.my-5.py-5 ul.list-group li:hover {
             background-color: #f0f0f0;
             cursor: pointer;
@@ -179,7 +172,6 @@ try {
             transition: color 0.3s;
         }
 
-        /* Back-to-Top Button */
         #back-to-top {
             position: fixed;
             bottom: 20px;
@@ -321,7 +313,7 @@ try {
                                     </div>
                                     <div class="modal-footer">
                                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                        <a href="customize.php?id=<?php echo $template['id']; ?>" class="btn btn-primary btn-sm">Customize</a>
+                                        <a href="customize.php?template_id=<?php echo $template['id']; ?>" class="btn btn-primary btn-sm">Customize</a>
                                     </div>
                                 </div>
                             </div>
@@ -361,7 +353,7 @@ try {
                                     </div>
                                     <div class="modal-footer">
                                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                        <a href="customize.php?id=<?php echo $template['id']; ?>" class="btn btn-primary btn-sm">Customize</a>
+                                        <a href="customize.php?template_id=<?php echo $template['id']; ?>" class="btn btn-primary btn-sm">Customize</a>
                                     </div>
                                 </div>
                             </div>
@@ -379,7 +371,6 @@ try {
             <p class="lead">
                 As mentioned above, if a boy or girl wants to find a suitable partner, they must exchange their information. So, let's see what a biodata includes.
             </p>
-
             <h2 class="mt-5">Biodata Format Details</h2>
             <p>
                 The first part is Personal Information. It includes details about the private life of the boy or girl and contains three types of information:
@@ -444,11 +435,10 @@ try {
             </div>
             <hr class="my-4 bg-light">
             <div class="text-center">
-                <p class="mb-0">&copy; 2023 Biodata Maker. All rights reserved.</p>
+                <p class="mb-0">© 2023 Biodata Maker. All rights reserved.</p>
             </div>
         </div>
     </footer>
-
 
     <!-- Back-to-Top Button -->
     <button id="back-to-top" onclick="scrollToTop()">
@@ -457,14 +447,12 @@ try {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Smooth scroll function for header buttons
         function scrollToSection(id) {
             document.getElementById(id).scrollIntoView({
                 behavior: 'smooth'
             });
         }
 
-        // Back-to-top scroll function
         function scrollToTop() {
             window.scrollTo({
                 top: 0,
@@ -472,7 +460,6 @@ try {
             });
         }
 
-        // Show/hide back-to-top button on scroll
         window.addEventListener('scroll', function() {
             const backToTopButton = document.getElementById('back-to-top');
             if (window.scrollY > 300) {
@@ -482,7 +469,6 @@ try {
             }
         });
 
-        // Scroll animation for cards and info sections
         document.addEventListener('DOMContentLoaded', function() {
             const observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
