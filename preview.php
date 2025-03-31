@@ -13,42 +13,112 @@ if (!$customized) die("Customized biodata not found.");
 function addWatermarks($image_path)
 {
     $image = loadImage('assets/images/' . $image_path);
-    $font = 'C:/Windows/Fonts/arial.ttf';
-    $font_size = 20;
-    $red = imagecolorallocate($image, 255, 0, 0);
-    $white = imagecolorallocatealpha($image, 255, 255, 255, 50);
+    $width = imagesx($image);
+    $height = imagesy($image);
 
-    // Top-left watermark
-    $text = "Preview";
-    $box = imagettfbbox($font_size, 0, $font, $text);
-    $text_width = $box[2] - $box[0];
-    $text_height = $box[1] - $box[7];
-    imagefilledrectangle(
-        $image,
-        10,
-        10,
-        10 + (int)$text_width + 10,
-        10 + (int)$text_height + 10,
-        $white
-    );
-    imagettftext($image, $font_size, 0, 15, 30, $red, $font, $text);
+    // Modern font choice (ensure you have the font file)
+    $font = 'assets/fonts/Roboto-Medium.ttf';
 
-    // Bottom watermark
-    $text = "Download to remove watermark";
+    // Dynamic sizing based on image dimensions
+    $base_size = min($width, $height);
+    $font_size = max(24, (int)($base_size / 40));
+    $margin = (int)($base_size / 40);
+    $padding = 15;
+    $corner_radius = 8;
+
+    // Gradient colors (white to red with 70% transparency)
+    $start_color = [255, 255, 255, 50];  // White with 60% opacity
+    $end_color = [139, 0, 0, 90];        // Dark red with 65% opacity
+
+    // Semi-transparent text color
+    $text_color = imagecolorallocatealpha($image, 255, 255, 255, 30); // 88% transparent
+
+    // Function to create gradient rectangles
+    function gradient_rect($img, $x, $y, $w, $h, $c1, $c2)
+    {
+        $x = (int)$x;
+        $y = (int)$y;
+        $w = (int)$w;
+        $h = (int)$h;
+
+        for ($i = 0; $i < $w; $i++) {
+            $ratio = $i / $w;
+            // Fixed missing closing parentheses
+            $r = $c1[0] + (int)(($c2[0] - $c1[0]) * $ratio);
+            $g = $c1[1] + (int)(($c2[1] - $c1[1]) * $ratio);
+            $b = $c1[2] + (int)(($c2[2] - $c1[2]) * $ratio);
+            $a = $c1[3] + (int)(($c2[3] - $c1[3]) * $ratio);
+            $color = imagecolorallocatealpha($img, $r, $g, $b, $a);
+            imageline($img, $x + $i, $y, $x + $i, $y + $h, $color);
+        }
+    }
+
+    // Top-right badge-style watermark
+    $text = "PREVIEW";
     $box = imagettfbbox($font_size, 0, $font, $text);
-    $text_width = $box[2] - $box[0];
-    $text_height = $box[1] - $box[7];
-    $x = (int)((imagesx($image) - $text_width) / 2);
-    $y = (int)(imagesy($image) - 500);
-    imagefilledrectangle(
-        $image,
-        $x - 5,
-        $y - (int)$text_height - 5,
-        $x + (int)$text_width + 5,
-        $y + 5,
-        $white
-    );
-    imagettftext($image, $font_size, 0, $x, $y, $red, $font, $text);
+    $text_width = (int)($box[2] - $box[0]);
+    $text_height = (int)abs($box[7] - $box[1]);
+
+    $badge_width = (int)($text_width + $padding * 2);
+    $badge_height = (int)($text_height + $padding);
+    $x = (int)$margin;  // Position from left margin
+    $y = (int)($margin + $badge_height);
+
+    // Draw gradient background with shadow effect
+    gradient_rect($image, $x + 2, $y + 2, $badge_width, $badge_height, [0, 0, 0, 50], [0, 0, 0, 50]); // Shadow
+    gradient_rect($image, $x, $y, $badge_width, $badge_height, $start_color, $end_color);
+
+    // Add text
+    $text_x = (int)($x + ($badge_width - $text_width) / 2);
+    $text_y = (int)($y + ($badge_height - $text_height) / 2 + $text_height);
+    imagettftext($image, $font_size, 0, $text_x, $text_y, $text_color, $font, $text);
+
+    // Centered watermark
+    $lines = [
+        "DOWNLOAD THE FULL RESOLUTION IMAGE",
+        "TO REMOVE THIS WATERMARK"
+    ];
+
+    // Calculate multi-line box size
+    $max_width = 0;
+    $total_height = 0;
+    foreach ($lines as $line) {
+        $box = imagettfbbox($font_size, 0, $font, $line);
+        $max_width = max($max_width, (int)($box[2] - $box[0]));
+        $total_height += (int)(abs($box[7] - $box[1]) + 5);
+    }
+
+    $box_width = (int)($max_width + $padding * 2);
+    $box_height = (int)($total_height + $padding * 2);
+    $x_center = (int)(($width - $box_width) / 2);
+    $y_center = (int)(($height - $box_height) / 2);
+
+    // Draw gradient background with shadow
+    gradient_rect($image, $x_center + 3, $y_center + 3, $box_width, $box_height, [0, 0, 0, 50], [0, 0, 0, 50]);
+    gradient_rect($image, $x_center, $y_center, $box_width, $box_height, $start_color, $end_color);
+
+    // Add text lines
+    $current_y = (int)($y_center + $padding + $text_height);
+    foreach ($lines as $line) {
+        $box = imagettfbbox($font_size, 0, $font, $line);
+        $text_width = (int)($box[2] - $box[0]);
+        $x_text = (int)($x_center + ($box_width - $text_width) / 2);
+        imagettftext($image, $font_size, 0, $x_text, $current_y, $text_color, $font, $line);
+        $current_y += (int)(abs($box[7] - $box[1]) + 15);
+    }
+
+    // Add subtle diagonal pattern
+    $pattern_color = imagecolorallocatealpha($image, 255, 255, 255, 90);
+    $angle = 30;
+    $pattern_text = "PREVIEW";
+    $pattern_size = (int)($base_size / 15);
+    for ($i = -2; $i < 5; $i++) {
+        for ($j = -2; $j < 5; $j++) {
+            $x = (int)($width / 4 * $i);
+            $y = (int)($height / 4 * $j);
+            imagettftext($image, $pattern_size, $angle, $x, $y, $pattern_color, $font, $pattern_text);
+        }
+    }
 
     $watermarked_path = 'watermarked/customized_' . time() . '.png';
     imagepng($image, 'assets/images/' . $watermarked_path);

@@ -107,13 +107,19 @@ $dropdown_options = [
 // Image generation function
 function generatePreviewImage($god_image, $god_name, $biodata, $family_details, $contact_details, $background_image, $photo, $language = 'en', $biodata_title = 'BIODATA', $family_title = 'Family Details', $contact_title = 'Contact Details')
 {
-    $width = 794;
-    $height = 1123;
-    $padding_left_right = 90;
-    $padding_top_bottom = 30;
-    $reserved_top_area = 150;
+    $width = 2480;  // 8.26in * 300 DPI
+    $height = 3508; // 11.69in * 300 DPI
+
+    $scale_factor = 3.125; // 2480/794 ≈ 3.125
+
+    $padding_left_right = 90 * $scale_factor;  // Original: 90
+    $padding_top_bottom = 30 * $scale_factor;  // Original: 30
+    $reserved_top_area = 150 * $scale_factor;  // Original: 150
+
 
     $canvas = imagecreatetruecolor($width, $height);
+    imageantialias($canvas, true); // Enable antialiasing
+    imagesetthickness($canvas, 1); // Optional: Set line thickness for better qualit
     $bg_path = __DIR__ . '/assets/images/' . $background_image;
     if (!file_exists($bg_path)) die("Background image not found: $bg_path");
     $bg = loadImage($bg_path);
@@ -129,22 +135,27 @@ function generatePreviewImage($god_image, $god_name, $biodata, $family_details, 
         if (!file_exists($god_image_path)) die("God image not found: $god_image_path");
         $god_img = loadImage($god_image_path);
         if ($god_img) {
-            $max_width = 100;
-            $max_height = 100;
+            // Scale up the dimensions proportionally (original was 100x100)
+            $max_width = 312;  // 100 * 3.125
+            $max_height = 312; // 100 * 3.125
+
             $orig_width = imagesx($god_img);
             $orig_height = imagesy($god_img);
             $ratio = min($max_width / $orig_width, $max_height / $orig_height);
             $new_width = (int)($orig_width * $ratio);
             $new_height = (int)($orig_height * $ratio);
+
+            // Adjust positioning to match new dimensions
             $x = (int)(($width - $new_width) / 2);
             $y = $padding_top_bottom + (int)(($reserved_top_area - $new_height) / 2);
+
+            // Use imagecopyresampled for better quality scaling
             imagecopyresampled($canvas, $god_img, $x, $y, 0, 0, $new_width, $new_height, $orig_width, $orig_height);
             imagedestroy($god_img);
         } else {
             die("Error loading god image: $god_image_path");
         }
     }
-
     $current_y = $padding_top_bottom + $reserved_top_area + 20;
     $max_content_height = $height - $padding_top_bottom - $reserved_top_area - $padding_top_bottom;
 
@@ -169,10 +180,11 @@ function generatePreviewImage($god_image, $god_name, $biodata, $family_details, 
     $elements_height += $contact_height;
 
     $scale = $elements_height > $max_content_height ? $max_content_height / $elements_height : 1;
-    $base_font_size *= $scale;
-    $god_name_size *= $scale;
-    $title_size *= $scale;
-    $line_height = 15 * $scale;
+    $base_font_size = 10 * $scale_factor;      // Original: 10
+    $god_name_size = 16 * $scale_factor;       // Original: 16
+    $title_size = 14 * $scale_factor;          // Original: 14
+    $line_height = 15 * $scale_factor;         // Original: 15
+
     $text_section_width = $content_width * 0.7;
 
     $current_y = $padding_top_bottom + $reserved_top_area + 20;
@@ -198,8 +210,8 @@ function generatePreviewImage($god_image, $god_name, $biodata, $family_details, 
         if (!file_exists($photo_path)) die("Person photo not found: $photo_path");
         $person_img = loadImage($photo_path);
         if ($person_img) {
-            $target_width = 130 * $scale;
-            $target_height = 173 * $scale;
+            $target_width = 130 * $scale_factor;       // Original: 130
+            $target_height = 173 * $scale_factor;      // Original: 173
             $photo_x = $width - $padding_left_right - $target_width;
             $photo_y = $padding_top_bottom + $reserved_top_area + 20;
             imagecopyresampled($canvas, $person_img, $photo_x, $photo_y, 0, 0, $target_width, $target_height, imagesx($person_img), imagesy($person_img));
@@ -851,7 +863,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <i class="fas fa-save me-1"></i> Create Biodata
                         </button>
                     </div>
-                </form>
+
             </div>
             <div class="col-md-4">
                 <div class="photo-upload card">
@@ -871,6 +883,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
                 </div>
             </div>
+            </form>
         </div>
     </div>
 
