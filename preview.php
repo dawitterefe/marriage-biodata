@@ -23,7 +23,14 @@ function addWatermarks($image_path)
     $box = imagettfbbox($font_size, 0, $font, $text);
     $text_width = $box[2] - $box[0];
     $text_height = $box[1] - $box[7];
-    imagefilledrectangle($image, 10, 10, 10 + $text_width + 10, 10 + $text_height + 10, $white);
+    imagefilledrectangle(
+        $image,
+        10,
+        10,
+        10 + (int)$text_width + 10,
+        10 + (int)$text_height + 10,
+        $white
+    );
     imagettftext($image, $font_size, 0, 15, 30, $red, $font, $text);
 
     // Bottom watermark
@@ -31,9 +38,16 @@ function addWatermarks($image_path)
     $box = imagettfbbox($font_size, 0, $font, $text);
     $text_width = $box[2] - $box[0];
     $text_height = $box[1] - $box[7];
-    $x = (imagesx($image) - $text_width) / 2;
-    $y = imagesy($image) - 500;
-    imagefilledrectangle($image, $x - 5, $y - $text_height - 5, $x + $text_width + 5, $y + 5, $white);
+    $x = (int)((imagesx($image) - $text_width) / 2);
+    $y = (int)(imagesy($image) - 500);
+    imagefilledrectangle(
+        $image,
+        $x - 5,
+        $y - (int)$text_height - 5,
+        $x + (int)$text_width + 5,
+        $y + 5,
+        $white
+    );
     imagettftext($image, $font_size, 0, $x, $y, $red, $font, $text);
 
     $watermarked_path = 'watermarked/customized_' . time() . '.png';
@@ -344,6 +358,15 @@ function calculateBrightness($image)
             border: none;
             padding: 0.8rem 2rem;
             border-radius: 50px;
+        }
+
+        /* Added interactivity: slight scale effect on hover for the preview image */
+        img.img-fluid {
+            transition: transform 0.3s ease-in-out;
+        }
+
+        img.img-fluid:hover {
+            transform: scale(1.02);
         }
     </style>
 </head>

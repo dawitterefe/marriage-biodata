@@ -2,6 +2,9 @@
 session_start();
 include 'config/db.php';
 
+// Suppress warnings temporarily to avoid header issues
+ob_start();
+
 // Check if editing an existing customized biodata or starting from a template
 $customized_id = isset($_GET['customized_id']) ? $_GET['customized_id'] : null;
 $template_id = isset($_GET['template_id']) ? $_GET['template_id'] : null;
@@ -11,14 +14,12 @@ if (!$customized_id && !$template_id) {
 }
 
 if ($customized_id) {
-    // Load from customized_biodatas
     $stmt = $pdo->prepare("SELECT * FROM customized_biodatas WHERE id = ?");
     $stmt->execute([$customized_id]);
     $data = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$data) die("Customized biodata not found.");
     $template_id = $data['template_id'];
 } else {
-    // Load from templates
     $stmt = $pdo->prepare("SELECT * FROM templates WHERE id = ?");
     $stmt->execute([$template_id]);
     $data = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -30,72 +31,81 @@ $family_details = json_decode($data['family_details'], true);
 $contact_details = $data['contact_details'] ? json_decode($data['contact_details'], true) : [];
 $god_names = $data['god_name'] ? explode('|', $data['god_name']) : [''];
 
-// Handle form submission
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $user_identifier = $_SERVER['REMOTE_ADDR'] . '-' . session_id();
-    $god_image = isset($_FILES['god_image']) && $_FILES['god_image']['name'] ? 'gods/' . basename($_FILES['god_image']['name']) : $data['god_image'];
-    if ($god_image && $_FILES['god_image']['name']) {
-        move_uploaded_file($_FILES['god_image']['tmp_name'], 'assets/images/' . $god_image);
-    }
-    $god_name = implode('|', array_filter($_POST['god_names']));
-    $photo = isset($_FILES['photo']) && $_FILES['photo']['name'] ? 'persons/' . basename($_FILES['photo']['name']) : $data['photo'];
-    if ($photo && $_FILES['photo']['name']) {
-        move_uploaded_file($_FILES['photo']['tmp_name'], 'assets/images/' . $photo);
-    }
+// Marathi translations for common fields
+$mr_translations = [
+    'Name' => 'नाव',
+    'Date of Birth' => 'जन्मतारीख',
+    'Time of Birth' => 'जन्मवेळ',
+    'Place of Birth' => 'जन्मस्थळ',
+    'Height' => 'उंची',
+    'Weight' => 'वजन',
+    'Education' => 'शिक्षण',
+    'Occupation' => 'व्यवसाय',
+    'Income' => 'उत्पन्न',
+    'Father' => 'वडील',
+    'Mother' => 'आई',
+    'Brothers' => 'भाऊ',
+    'Sisters' => 'बहीण',
+    'Address' => 'पत्ता',
+    'Mobile' => 'मोबाईल',
+    'Email' => 'ईमेल',
+    'Religion' => 'धर्म',
+    'Zodiac sign' => 'राशी',
+    'Constellation' => 'नक्षत्र',
+    'Clan' => 'कुळ',
+    'Pulse' => 'नाडी',
+    'Manglik' => 'मंगळिक',
+    'Tribe' => 'जमात',
+    'Character' => 'स्वभाव',
+    'Blood type' => 'रक्त गट'
+];
 
-    $biodata_post = [];
-    foreach ($_POST['biodata_keys'] as $i => $key) {
-        if ($key && $_POST['biodata_values'][$i]) {
-            $biodata_post[$key] = $_POST['biodata_values'][$i];
-        }
-    }
-    $family_post = [];
-    foreach ($_POST['family_keys'] as $i => $key) {
-        if ($key && $_POST['family_values'][$i]) {
-            $family_post[$key] = $_POST['family_values'][$i];
-        }
-    }
-    $contact_post = [];
-    foreach ($_POST['contact_keys'] as $i => $key) {
-        if ($key && $_POST['contact_values'][$i]) {
-            $contact_post[$key] = $_POST['contact_values'][$i];
-        }
-    }
+// Dropdown options with translations
+$dropdown_options = [
+    'Religion' => [
+        'en' => ['Hindu', 'Muslim', 'Christian', 'Sikh', 'Buddhist', 'Jain', 'Other'],
+        'mr' => ['हिंदू', 'मुस्लिम', 'ख्रिश्चन', 'शीख', 'बौद्ध', 'जैन', 'इतर']
+    ],
+    'Zodiac sign' => [
+        'en' => ['Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'],
+        'mr' => ['मेष', 'वृषभ', 'मिथुन', 'कर्क', 'सिंह', 'कन्या', 'तुला', 'वृश्चिक', 'धनु', 'मकर', 'कुंभ', 'मीन']
+    ],
+    'Constellation' => [
+        'en' => ['Ashwini', 'Bharani', 'Krittika', 'Rohini', 'Mrigashira', 'Ardra', 'Punarvasu', 'Pushya', 'Ashlesha', 'Magha', 'Purva Phalguni', 'Uttara Phalguni', 'Hasta', 'Chitra', 'Swati', 'Vishakha', 'Anuradha', 'Jyeshtha', 'Mula', 'Purva Ashadha', 'Uttara Ashadha', 'Shravana', 'Dhanishta', 'Shatabhisha', 'Purva Bhadrapada', 'Uttara Bhadrapada', 'Revati'],
+        'mr' => ['अश्विनी', 'भरणी', 'कृत्तिका', 'रोहिणी', 'मृगशिरा', 'आर्द्रा', 'पुनर्वसु', 'पुष्य', 'आश्लेषा', 'मघा', 'पूर्व फाल्गुनी', 'उत्तर फाल्गुनी', 'हस्त', 'चित्रा', 'स्वाती', 'विशाखा', 'अनुराधा', 'ज्येष्ठा', 'मूळ', 'पूर्वाषाढा', 'उत्तराषाढा', 'श्रवण', 'धनिष्ठा', 'शतभिषा', 'पूर्व भाद्रपदा', 'उत्तर भाद्रपदा', 'रेवती']
+    ],
+    'Clan' => [
+        'en' => ['Custom Clan 1', 'Custom Clan 2', 'Custom Clan 3'],
+        'mr' => ['कुळ १', 'कुळ २', 'कुळ ३']
+    ],
+    'Pulse' => [
+        'en' => ['Adi', 'Madhya', 'Antya'],
+        'mr' => ['आदि', 'मध्य', 'अंत्य']
+    ],
+    'Manglik' => [
+        'en' => ['Yes', 'No', 'Not Sure'],
+        'mr' => ['होय', 'नाही', 'खात्री नाही']
+    ],
+    'Tribe' => [
+        'en' => ['Custom Tribe 1', 'Custom Tribe 2', 'Custom Tribe 3'],
+        'mr' => ['जमात १', 'जमात २', 'जमात ३']
+    ],
+    'Height' => [
+        'en' => ['4\'0"', '4\'6"', '5\'0"', '5\'6"', '6\'0"', '6\'6"', '7\'0"'],
+        'mr' => ['४\'०"', '४\'६"', '५\'०"', '५\'६"', '६\'०"', '६\'६"', '७\'०"']
+    ],
+    'Character' => [
+        'en' => ['Calm', 'Energetic', 'Friendly', 'Reserved', 'Outgoing'],
+        'mr' => ['शांत', 'उत्साही', 'मैत्रीपूर्ण', 'संयमित', 'बाहेर जाणारा']
+    ],
+    'Blood type' => [
+        'en' => ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
+        'mr' => ['ए+', 'ए-', 'बी+', 'बी-', 'एबी+', 'एबी-', 'ओ+', 'ओ-']
+    ]
+];
 
-    $preview_image = generatePreviewImage(
-        $god_image,
-        $god_name,
-        json_encode($biodata_post),
-        json_encode($family_post),
-        json_encode($contact_post),
-        $data['background_image'],
-        $photo
-    );
-
-    $stmt = $pdo->prepare(
-        "INSERT INTO customized_biodatas (template_id, user_identifier, god_image, god_name, biodata, family_details, contact_details, background_image, photo, preview_image) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    );
-    $stmt->execute([
-        $template_id,
-        $user_identifier,
-        $god_image,
-        $god_name,
-        json_encode($biodata_post),
-        json_encode($family_post),
-        json_encode($contact_post),
-        $data['background_image'],
-        $photo,
-        $preview_image
-    ]);
-    $customized_id = $pdo->lastInsertId();
-
-    header("Location: preview.php?id=$customized_id");
-    exit;
-}
-
-// Image generation function (moved here for completeness)
-function generatePreviewImage($god_image, $god_name, $biodata, $family_details, $contact_details, $background_image, $photo)
+// Image generation function
+function generatePreviewImage($god_image, $god_name, $biodata, $family_details, $contact_details, $background_image, $photo, $language = 'en', $biodata_title = 'BIODATA', $family_title = 'Family Details', $contact_title = 'Contact Details')
 {
     $width = 794;
     $height = 1123;
@@ -104,17 +114,20 @@ function generatePreviewImage($god_image, $god_name, $biodata, $family_details, 
     $reserved_top_area = 150;
 
     $canvas = imagecreatetruecolor($width, $height);
-    $bg = loadImage('assets/images/' . $background_image);
-    if (!$bg) die("Error loading background image");
+    $bg_path = __DIR__ . '/assets/images/' . $background_image;
+    if (!file_exists($bg_path)) die("Background image not found: $bg_path");
+    $bg = loadImage($bg_path);
+    if (!$bg) die("Error loading background image: $bg_path");
     imagecopyresampled($canvas, $bg, 0, 0, 0, 0, $width, $height, imagesx($bg), imagesy($bg));
-
     $brightness = calculateBrightness($bg);
     $text_color = ($brightness < 128) ? imagecolorallocate($canvas, 255, 255, 255) : imagecolorallocate($canvas, 0, 0, 0);
     imagedestroy($bg);
 
     $current_y = $padding_top_bottom;
     if ($god_image) {
-        $god_img = loadImage('assets/images/' . $god_image);
+        $god_image_path = __DIR__ . '/assets/images/' . $god_image;
+        if (!file_exists($god_image_path)) die("God image not found: $god_image_path");
+        $god_img = loadImage($god_image_path);
         if ($god_img) {
             $max_width = 100;
             $max_height = 100;
@@ -127,14 +140,19 @@ function generatePreviewImage($god_image, $god_name, $biodata, $family_details, 
             $y = $padding_top_bottom + (int)(($reserved_top_area - $new_height) / 2);
             imagecopyresampled($canvas, $god_img, $x, $y, 0, 0, $new_width, $new_height, $orig_width, $orig_height);
             imagedestroy($god_img);
+        } else {
+            die("Error loading god image: $god_image_path");
         }
     }
 
     $current_y = $padding_top_bottom + $reserved_top_area + 20;
     $max_content_height = $height - $padding_top_bottom - $reserved_top_area - $padding_top_bottom;
 
-    $font_regular = 'C:/Windows/Fonts/times.ttf';
-    $font_bold = 'C:/Windows/Fonts/timesbd.ttf';
+    $font_regular = ($language === 'mr') ? __DIR__ . '/assets/fonts/mangal.ttf' : __DIR__ . '/assets/fonts/times.ttf';
+    $font_bold = ($language === 'mr') ? __DIR__ . '/assets/fonts/mangalb.ttf' : __DIR__ . '/assets/fonts/timesbd.ttf';
+    if (!file_exists($font_regular) || !file_exists($font_bold)) {
+        die("Font files missing: Ensure times.ttf, timesbd.ttf, mangal.ttf, and mangalb.ttf are in assets/fonts/");
+    }
 
     $base_font_size = 10;
     $god_name_size = 16;
@@ -169,14 +187,16 @@ function generatePreviewImage($god_image, $god_name, $biodata, $family_details, 
     }
     $current_y += 15 * $scale;
 
-    $current_y = drawSection($canvas, 'BIODATA', $biodata_data, $current_y, $title_size, $base_font_size, $font_bold, $font_regular, $padding_left_right, $text_section_width, $line_height, $text_color, $scale);
-    $current_y = drawSection($canvas, 'Family Details', $family_data, $current_y, $title_size, $base_font_size, $font_bold, $font_regular, $padding_left_right, $text_section_width, $line_height, $text_color, $scale);
+    $current_y = drawSection($canvas, $biodata_title, $biodata_data, $current_y, $title_size, $base_font_size, $font_bold, $font_regular, $padding_left_right, $text_section_width, $line_height, $text_color, $scale);
+    $current_y = drawSection($canvas, $family_title, $family_data, $current_y, $title_size, $base_font_size, $font_bold, $font_regular, $padding_left_right, $text_section_width, $line_height, $text_color, $scale);
     if ($contact_data) {
-        $current_y = drawSection($canvas, 'Contact Details', $contact_data, $current_y, $title_size, $base_font_size, $font_bold, $font_regular, $padding_left_right, $text_section_width, $line_height, $text_color, $scale);
+        $current_y = drawSection($canvas, $contact_title, $contact_data, $current_y, $title_size, $base_font_size, $font_bold, $font_regular, $padding_left_right, $text_section_width, $line_height, $text_color, $scale);
     }
 
     if ($photo) {
-        $person_img = loadImage('assets/images/' . $photo);
+        $photo_path = __DIR__ . '/assets/images/' . $photo;
+        if (!file_exists($photo_path)) die("Person photo not found: $photo_path");
+        $person_img = loadImage($photo_path);
         if ($person_img) {
             $target_width = 130 * $scale;
             $target_height = 173 * $scale;
@@ -184,11 +204,14 @@ function generatePreviewImage($god_image, $god_name, $biodata, $family_details, 
             $photo_y = $padding_top_bottom + $reserved_top_area + 20;
             imagecopyresampled($canvas, $person_img, $photo_x, $photo_y, 0, 0, $target_width, $target_height, imagesx($person_img), imagesy($person_img));
             imagedestroy($person_img);
+        } else {
+            die("Error loading person photo: $photo_path");
         }
     }
 
     $preview_path = 'previews/customized_' . time() . '.png';
-    imagepng($canvas, 'assets/images/' . $preview_path);
+    $full_preview_path = __DIR__ . '/assets/images/' . $preview_path;
+    imagepng($canvas, $full_preview_path);
     imagedestroy($canvas);
     return $preview_path;
 }
@@ -285,9 +308,10 @@ function wrapTextForHeightCalc($text, $max_width, $font, $font_size)
 
 function loadImage($path)
 {
+    if (!file_exists($path)) return false;
     $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-    if ($ext === 'jpg' || $ext === 'jpeg') return imagecreatefromjpeg($path);
-    if ($ext === 'png') return imagecreatefrompng($path);
+    if ($ext === 'jpg' || $ext === 'jpeg') return @imagecreatefromjpeg($path);
+    if ($ext === 'png') return @imagecreatefrompng($path);
     return false;
 }
 
@@ -296,7 +320,7 @@ function calculateBrightness($image)
     $width = imagesx($image);
     $height = imagesy($image);
     $total_brightness = 0;
-    for ($x = 0; $x < $width; $x += 10) { // Sample every 10 pixels for performance
+    for ($x = 0; $x < $width; $x += 10) {
         for ($y = 0; $y < $height; $y += 10) {
             $rgb = imagecolorat($image, $x, $y);
             $r = ($rgb >> 16) & 0xFF;
@@ -309,6 +333,133 @@ function calculateBrightness($image)
     $pixel_count = ($width / 10) * ($height / 10);
     return $total_brightness / $pixel_count;
 }
+
+// Handle form submission
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $user_identifier = $_SERVER['REMOTE_ADDR'] . '-' . session_id();
+    $language = isset($_POST['language']) ? $_POST['language'] : 'en';
+
+    // Handle god image
+    if (isset($_POST['remove_god_image']) && $_POST['remove_god_image'] == '1') {
+        $god_image = null;
+    } elseif (isset($_FILES['god_image']) && $_FILES['god_image']['error'] == UPLOAD_ERR_OK) {
+        $god_image_name = 'gods/' . time() . '_' . basename($_FILES['god_image']['name']);
+        $god_image_path = __DIR__ . '/assets/images/' . $god_image_name;
+        if (!move_uploaded_file($_FILES['god_image']['tmp_name'], $god_image_path)) {
+            die("Failed to move uploaded god image to: $god_image_path");
+        }
+        $god_image = $god_image_name;
+    } elseif (isset($_POST['selected_god_image']) && !empty($_POST['selected_god_image'])) {
+        $god_image = 'gods/' . basename($_POST['selected_god_image']);
+    } else {
+        $god_image = !empty($data['god_image']) ? $data['god_image'] : null;
+    }
+
+    $god_name = implode('|', array_filter($_POST['god_names']));
+
+    // Handle person photo
+    if (isset($_POST['remove_photo']) && $_POST['remove_photo'] == '1') {
+        $photo = null;
+    } elseif (isset($_FILES['photo']) && $_FILES['photo']['error'] == UPLOAD_ERR_OK) {
+        $photo_name = 'persons/' . time() . '_' . basename($_FILES['photo']['name']);
+        $photo_path = __DIR__ . '/assets/images/' . $photo_name;
+        if (move_uploaded_file($_FILES['photo']['tmp_name'], $photo_path)) {
+            $photo = $photo_name;
+        } else {
+            error_log("Failed to move uploaded person photo to: $photo_path");
+            $photo = !empty($data['photo']) ? $data['photo'] : null;
+        }
+    } else {
+        if (isset($_FILES['photo']) && $_FILES['photo']['error'] != UPLOAD_ERR_NO_FILE) {
+            error_log("Photo upload error: " . $_FILES['photo']['error']);
+        }
+        $photo = !empty($data['photo']) ? $data['photo'] : null;
+    }
+
+    // Handle biodata, family, and contact details
+    $biodata_post = [];
+    foreach ($_POST['biodata_keys'] as $i => $key) {
+        if ($key && isset($_POST['biodata_values'][$i]) && $_POST['biodata_values'][$i]) {
+            $biodata_post[$key] = $_POST['biodata_values'][$i];
+        }
+    }
+    $family_post = [];
+    foreach ($_POST['family_keys'] as $i => $key) {
+        if ($key && isset($_POST['family_values'][$i]) && $_POST['family_values'][$i]) {
+            $family_post[$key] = $_POST['family_values'][$i];
+        }
+    }
+    $contact_post = [];
+    foreach ($_POST['contact_keys'] as $i => $key) {
+        if ($key && isset($_POST['contact_values'][$i]) && $_POST['contact_values'][$i]) {
+            $contact_post[$key] = $_POST['contact_values'][$i];
+        }
+    }
+
+    $biodata_title = isset($_POST['biodata_title']) ? $_POST['biodata_title'] : 'BIODATA';
+    $family_title = isset($_POST['family_title']) ? $_POST['family_title'] : 'Family Details';
+    $contact_title = isset($_POST['contact_title']) ? $_POST['contact_title'] : 'Contact Details';
+
+    // Use the background image from the original template
+    $background_image = $data['background_image'];
+
+    $preview_image = generatePreviewImage(
+        $god_image,
+        $god_name,
+        json_encode($biodata_post),
+        json_encode($family_post),
+        json_encode($contact_post),
+        $background_image,
+        $photo,
+        $language,
+        $biodata_title,
+        $family_title,
+        $contact_title
+    );
+
+    // Insert or update the customized_biodatas table
+    if ($customized_id) {
+        $stmt = $pdo->prepare(
+            "UPDATE customized_biodatas SET 
+                god_image = ?, god_name = ?, biodata = ?, family_details = ?, contact_details = ?, 
+                background_image = ?, photo = ?, preview_image = ? 
+            WHERE id = ?"
+        );
+        $stmt->execute([
+            $god_image,
+            $god_name,
+            json_encode($biodata_post),
+            json_encode($family_post),
+            json_encode($contact_post),
+            $background_image,
+            $photo,
+            $preview_image,
+            $customized_id
+        ]);
+    } else {
+        $stmt = $pdo->prepare(
+            "INSERT INTO customized_biodatas (template_id, user_identifier, god_image, god_name, biodata, family_details, contact_details, background_image, photo, preview_image) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        );
+        $stmt->execute([
+            $template_id,
+            $user_identifier,
+            $god_image,
+            $god_name,
+            json_encode($biodata_post),
+            json_encode($family_post),
+            json_encode($contact_post),
+            $background_image,
+            $photo,
+            $preview_image
+        ]);
+        $customized_id = $pdo->lastInsertId();
+    }
+
+    ob_end_clean();
+    header("Location: preview.php?id=$customized_id");
+    exit;
+}
 ?>
 
 <!DOCTYPE html>
@@ -317,7 +468,7 @@ function calculateBrightness($image)
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Customize Biodata</title>
+    <title data-translate="title">Customize Biodata</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
     <style>
@@ -326,10 +477,18 @@ function calculateBrightness($image)
             --gradient-accent: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             --text-dark: #333;
             --text-light: #fff;
+            --border-radius: 8px;
+            --box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
         .navbar-custom {
             background: var(--gradient-primary);
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
         }
 
         .navbar-custom .navbar-brand,
@@ -338,63 +497,137 @@ function calculateBrightness($image)
             font-weight: 500;
         }
 
-        .navbar-custom .nav-link:hover {
-            color: #d0e8ff;
-        }
-
         .btn-primary {
             background: var(--gradient-primary);
             border: none;
             padding: 0.8rem 2rem;
             border-radius: 50px;
             transition: all 0.3s ease;
+            font-weight: 500;
         }
 
         .btn-primary:hover {
-            transform: scale(1.05);
-            box-shadow: 0 5px 15px rgba(78, 84, 200, 0.3);
-        }
-
-        .btn-sm {
-            padding: 0.4rem 1rem;
-            font-size: 0.875rem;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(78, 84, 200, 0.4);
         }
 
         .photo-upload {
-            position: fixed;
+            position: sticky;
             top: 100px;
-            right: 20px;
-            width: 30%;
-            z-index: 1000;
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            padding: 20px;
+            margin-bottom: 20px;
         }
 
         .field-row {
             display: flex;
             align-items: center;
-            margin-bottom: 10px;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 12px 15px;
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            transition: all 0.2s ease;
         }
 
-        .field-row .move-btns {
-            flex: 0 0 40px;
+        .field-row:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
-        .field-row .delete-btn {
-            flex: 0 0 40px;
+        .field-actions {
+            margin-left: auto;
+            display: flex;
+            gap: 8px;
         }
 
-        .field-row .key-input {
-            flex: 1;
-            margin-right: 10px;
+        .btn-icon {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: all 0.2s ease;
         }
 
-        .field-row .value-input {
-            flex: 1;
+        .btn-icon:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-icon i {
+            font-size: 0.8rem;
+        }
+
+        .form-control,
+        .form-select {
+            border-radius: var(--border-radius);
+            padding: 8px 12px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            border-color: #8f94fb;
+            box-shadow: 0 0 0 0.25rem rgba(142, 148, 251, 0.25);
+        }
+
+        .lang-btn.active {
+            background: var(--gradient-accent);
+            border-color: transparent;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .card {
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            border: none;
+        }
+
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
+            color: #4e54c8;
+            font-weight: 600;
+        }
+
+        #photoPlaceholder,
+        #godImagePlaceholder {
+            border: 2px dashed #ddd;
+            border-radius: var(--border-radius);
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        #photoPlaceholder:hover,
+        #godImagePlaceholder:hover {
+            border-color: #8f94fb;
+            background: rgba(142, 148, 251, 0.05);
+        }
+
+        .god-image-option {
+            border-radius: var(--border-radius);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .god-image-option:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
         }
     </style>
 </head>
 
 <body class="bg-light">
-    <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark navbar-custom fixed-top shadow-sm">
         <div class="container">
             <a class="navbar-brand fw-bold" href="index.php">Biodata Maker</a>
@@ -412,178 +645,275 @@ function calculateBrightness($image)
     <div class="container my-5 pt-5">
         <div class="row">
             <div class="col-md-8">
-                <h1 class="mb-4">Customize Your Biodata</h1>
+                <h1 class="mb-4" data-translate="title">Customize Your Biodata</h1>
                 <form method="post" enctype="multipart/form-data" id="customizeForm">
-                    <!-- Language Selection -->
-                    <div class="mb-3">
-                        <button type="button" class="btn btn-primary" id="lang-english">English</button>
-                        <button type="button" class="btn btn-primary" id="lang-marathi">मराठी</button>
-                    </div>
+                    <input type="hidden" name="language" id="currentLanguage" value="en">
+                    <input type="hidden" name="selected_god_image" id="selectedGodImage" value="<?php echo htmlspecialchars($data['god_image'] ?? ''); ?>">
+                    <input type="hidden" name="remove_god_image" id="removeGodImageInput" value="0">
+                    <input type="hidden" name="remove_photo" id="removePhotoInput" value="0">
 
-                    <!-- God Image -->
-                    <div class="mb-3 text-center">
-                        <?php if ($data['god_image']): ?>
-                            <img src="assets/images/<?php echo $data['god_image']; ?>" id="godImagePreview" class="img-fluid" style="max-width: 100px;" alt="God Image">
-                        <?php endif; ?>
-                        <div class="mt-2">
-                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#changeGodImageModal">Change God Photo</button>
-                            <button type="button" class="btn btn-sm btn-danger" id="removeGodImage">Remove God Photo</button>
+                    <div class="mb-4">
+                        <label class="mb-2 d-block" data-translate="select_language">Select Language:</label>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-primary lang-btn active" id="lang-english">English</button>
+                            <button type="button" class="btn btn-primary lang-btn" id="lang-marathi">मराठी</button>
                         </div>
-                        <input type="file" name="god_image" id="godImageInput" style="display: none;">
                     </div>
 
-                    <!-- God Names -->
-                    <div class="mb-3">
-                        <h3>God Name(s)</h3>
+                    <div class="mb-4 text-center">
+                        <?php if (!empty($data['god_image'])): ?>
+                            <img src="assets/images/<?php echo htmlspecialchars($data['god_image']); ?>" id="godImagePreview" class="img-fluid rounded-circle shadow" style="max-width: 120px; height: 120px; object-fit: cover;" alt="God Image">
+                        <?php else: ?>
+                            <div id="godImagePlaceholder" data-translate="click_to_add_god_image">Click to add god image</div>
+                        <?php endif; ?>
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#changeGodImageModal" data-translate="change_god_photo">Change God Photo</button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="removeGodImage" data-translate="remove_god_photo">Remove God Photo</button>
+                        </div>
+                        <input type="file" name="god_image" id="godImageInput" style="display: none;" accept="image/*">
+                    </div>
+
+                    <div class="mb-4">
+                        <h3 data-translate="god_names">God Name(s)</h3>
                         <div id="godNames">
                             <?php foreach ($god_names as $i => $name): ?>
                                 <div class="field-row god-name-row">
-                                    <div class="move-btns">
-                                        <button type="button" class="btn btn-sm btn-secondary move-up"><i class="fas fa-arrow-up"></i></button>
-                                        <button type="button" class="btn btn-sm btn-secondary move-down"><i class="fas fa-arrow-down"></i></button>
+                                    <input type="text" name="god_names[]" class="form-control" value="<?php echo htmlspecialchars($name); ?>">
+                                    <div class="field-actions">
+                                        <div class="btn-group">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary btn-icon move-up">
+                                                <i class="fas fa-arrow-up"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary btn-icon move-down">
+                                                <i class="fas fa-arrow-down"></i>
+                                            </button>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-danger btn-icon delete-god-name">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
                                     </div>
-                                    <div class="delete-btn">
-                                        <button type="button" class="btn btn-sm btn-danger delete-god-name"><i class="fas fa-trash"></i></button>
-                                    </div>
-                                    <input type="text" name="god_names[]" class="form-control" value="<?php echo $name; ?>">
                                 </div>
                             <?php endforeach; ?>
                         </div>
-                        <button type="button" class="btn btn-sm btn-success mt-2" id="addGodName">Add God Name</button>
+                        <button type="button" class="btn btn-sm btn-success mt-2" id="addGodName" data-translate="add_god_name">
+                            <i class="fas fa-plus me-1"></i> Add God Name
+                        </button>
                     </div>
 
-                    <!-- Biodata Title -->
-                    <div class="mb-3">
-                        <label>Title:</label>
+                    <div class="mb-4">
+                        <label data-translate="biodata_title">Title:</label>
                         <div class="input-group">
                             <select class="form-control" id="biodata_title" name="biodata_title">
                                 <option selected>BIODATA</option>
                             </select>
-                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addCustomHeadingModal">Add Custom Heading</button>
+                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCustomHeadingModal" data-section="biodata" data-translate="add_custom_heading">
+                                Add Custom Heading
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Biodata Fields -->
-                    <h3>Biodata</h3>
-                    <div id="biodataFields">
-                        <?php foreach ($biodata as $key => $value): ?>
-                            <div class="field-row">
-                                <div class="move-btns">
-                                    <button type="button" class="btn btn-sm btn-secondary move-up"><i class="fas fa-arrow-up"></i></button>
-                                    <button type="button" class="btn btn-sm btn-secondary move-down"><i class="fas fa-arrow-down"></i></button>
+                    <div class="mb-4">
+                        <h3 data-translate="biodata_section">Biodata</h3>
+                        <div id="biodataFields">
+                            <?php foreach ($biodata as $key => $value): ?>
+                                <div class="field-row">
+                                    <?php if (array_key_exists($key, $dropdown_options)): ?>
+                                        <input type="text" name="biodata_keys[]" class="form-control key-input"
+                                            value="<?php echo htmlspecialchars($key); ?>"
+                                            data-lang-en="<?php echo htmlspecialchars($key); ?>"
+                                            data-lang-mr="<?php echo htmlspecialchars($mr_translations[$key] ?? $key); ?>">
+                                        <select name="biodata_values[]" class="form-select value-input">
+                                            <?php foreach ($dropdown_options[$key]['en'] as $index => $option): ?>
+                                                <option value="<?php echo htmlspecialchars($option); ?>"
+                                                    data-lang-en="<?php echo htmlspecialchars($option); ?>"
+                                                    data-lang-mr="<?php echo htmlspecialchars($dropdown_options[$key]['mr'][$index]); ?>"
+                                                    <?php echo $value === $option ? 'selected' : ''; ?>>
+                                                    <?php echo htmlspecialchars($option); ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    <?php else: ?>
+                                        <input type="text" name="biodata_keys[]" class="form-control key-input"
+                                            value="<?php echo htmlspecialchars($key); ?>"
+                                            data-lang-en="<?php echo htmlspecialchars($key); ?>"
+                                            data-lang-mr="<?php echo htmlspecialchars($mr_translations[$key] ?? $key); ?>">
+                                        <input type="text" name="biodata_values[]" class="form-control value-input"
+                                            value="<?php echo htmlspecialchars($value); ?>">
+                                    <?php endif; ?>
+                                    <div class="field-actions">
+                                        <div class="btn-group">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary btn-icon move-up">
+                                                <i class="fas fa-arrow-up"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary btn-icon move-down">
+                                                <i class="fas fa-arrow-down"></i>
+                                            </button>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-danger btn-icon delete-field">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="delete-btn">
-                                    <button type="button" class="btn btn-sm btn-danger delete-field"><i class="fas fa-trash"></i></button>
-                                </div>
-                                <input type="text" name="biodata_keys[]" class="form-control key-input" value="<?php echo $key; ?>">
-                                <input type="text" name="biodata_values[]" class="form-control value-input" value="<?php echo $value; ?>">
-                            </div>
-                        <?php endforeach; ?>
+                            <?php endforeach; ?>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-success mt-2" id="addBiodataField" data-translate="add_field">
+                            <i class="fas fa-plus me-1"></i> Add Field
+                        </button>
                     </div>
-                    <button type="button" class="btn btn-sm btn-success mt-2" id="addBiodataField">Add Field</button>
 
-                    <!-- Family Details -->
-                    <h3 class="mt-4">Family Details</h3>
-                    <div id="familyFields">
-                        <?php foreach ($family_details as $key => $value): ?>
-                            <div class="field-row">
-                                <div class="move-btns">
-                                    <button type="button" class="btn btn-sm btn-secondary move-up"><i class="fas fa-arrow-up"></i></button>
-                                    <button type="button" class="btn btn-sm btn-secondary move-down"><i class="fas fa-arrow-down"></i></button>
+                    <div class="mb-4">
+                        <label data-translate="family_details">Title:</label>
+                        <div class="input-group">
+                            <select class="form-control" id="family_title" name="family_title">
+                                <option selected>Family Details</option>
+                            </select>
+                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCustomHeadingModal" data-section="family" data-translate="add_custom_heading">
+                                Add Custom Heading
+                            </button>
+                        </div>
+                        <h3 data-translate="family_details">Family Details</h3>
+                        <div id="familyFields">
+                            <?php foreach ($family_details as $key => $value): ?>
+                                <div class="field-row">
+                                    <input type="text" name="family_keys[]" class="form-control key-input"
+                                        value="<?php echo htmlspecialchars($key); ?>"
+                                        data-lang-en="<?php echo htmlspecialchars($key); ?>"
+                                        data-lang-mr="<?php echo htmlspecialchars($mr_translations[$key] ?? $key); ?>">
+                                    <input type="text" name="family_values[]" class="form-control value-input"
+                                        value="<?php echo htmlspecialchars($value); ?>">
+                                    <div class="field-actions">
+                                        <div class="btn-group">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary btn-icon move-up">
+                                                <i class="fas fa-arrow-up"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary btn-icon move-down">
+                                                <i class="fas fa-arrow-down"></i>
+                                            </button>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-danger btn-icon delete-field">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="delete-btn">
-                                    <button type="button" class="btn btn-sm btn-danger delete-field"><i class="fas fa-trash"></i></button>
-                                </div>
-                                <input type="text" name="family_keys[]" class="form-control key-input" value="<?php echo $key; ?>">
-                                <input type="text" name="family_values[]" class="form-control value-input" value="<?php echo $value; ?>">
-                            </div>
-                        <?php endforeach; ?>
+                            <?php endforeach; ?>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-success mt-2" id="addFamilyField" data-translate="add_field">
+                            <i class="fas fa-plus me-1"></i> Add Field
+                        </button>
                     </div>
-                    <button type="button" class="btn btn-sm btn-success mt-2" id="addFamilyField">Add Field</button>
 
-                    <!-- Contact Details -->
-                    <h3 class="mt-4">Contact Details</h3>
-                    <div id="contactFields">
-                        <?php foreach ($contact_details as $key => $value): ?>
-                            <div class="field-row">
-                                <div class="move-btns">
-                                    <button type="button" class="btn btn-sm btn-secondary move-up"><i class="fas fa-arrow-up"></i></button>
-                                    <button type="button" class="btn btn-sm btn-secondary move-down"><i class="fas fa-arrow-down"></i></button>
+                    <div class="mb-4">
+                        <label data-translate="contact_details">Title:</label>
+                        <div class="input-group">
+                            <select class="form-control" id="contact_title" name="contact_title">
+                                <option selected>Contact Details</option>
+                            </select>
+                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCustomHeadingModal" data-section="contact" data-translate="add_custom_heading">
+                                Add Custom Heading
+                            </button>
+                        </div>
+                        <h3 data-translate="contact_details">Contact Details</h3>
+                        <div id="contactFields">
+                            <?php foreach ($contact_details as $key => $value): ?>
+                                <div class="field-row">
+                                    <input type="text" name="contact_keys[]" class="form-control key-input"
+                                        value="<?php echo htmlspecialchars($key); ?>"
+                                        data-lang-en="<?php echo htmlspecialchars($key); ?>"
+                                        data-lang-mr="<?php echo htmlspecialchars($mr_translations[$key] ?? $key); ?>">
+                                    <input type="text" name="contact_values[]" class="form-control value-input"
+                                        value="<?php echo htmlspecialchars($value); ?>">
+                                    <div class="field-actions">
+                                        <div class="btn-group">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary btn-icon move-up">
+                                                <i class="fas fa-arrow-up"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary btn-icon move-down">
+                                                <i class="fas fa-arrow-down"></i>
+                                            </button>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-danger btn-icon delete-field">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="delete-btn">
-                                    <button type="button" class="btn btn-sm btn-danger delete-field"><i class="fas fa-trash"></i></button>
-                                </div>
-                                <input type="text" name="contact_keys[]" class="form-control key-input" value="<?php echo $key; ?>">
-                                <input type="text" name="contact_values[]" class="form-control value-input" value="<?php echo $value; ?>">
-                            </div>
-                        <?php endforeach; ?>
+                            <?php endforeach; ?>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-success mt-2" id="addContactField" data-translate="add_field">
+                            <i class="fas fa-plus me-1"></i> Add Field
+                        </button>
                     </div>
-                    <button type="button" class="btn btn-sm btn-success mt-2" id="addContactField">Add Field</button>
 
-                    <!-- Reset and Submit -->
-                    <div class="mt-4">
-                        <button type="button" class="btn btn-warning" id="resetForm">Reset Form</button>
-                        <button type="submit" class="btn btn-primary" id="createBiodata">Create Biodata</button>
+                    <div class="mt-4 d-flex justify-content-between">
+                        <button type="button" class="btn btn-warning" id="resetForm" data-translate="reset_form">
+                            <i class="fas fa-undo me-1"></i> Reset Form
+                        </button>
+                        <button type="submit" class="btn btn-primary" id="createBiodata" data-translate="create_biodata">
+                            <i class="fas fa-save me-1"></i> Create Biodata
+                        </button>
                     </div>
                 </form>
             </div>
             <div class="col-md-4">
-                <div class="photo-upload card p-3">
-                    <h5>Upload Your Photo</h5>
-                    <div id="photoPlaceholder" class="text-center" style="border: 2px dashed #ccc; padding: 20px; cursor: pointer;">
-                        <?php if ($data['photo']): ?>
-                            <img src="assets/images/<?php echo $data['photo']; ?>" id="photoPreview" class="img-fluid" style="max-width: 100%;">
+                <div class="photo-upload card">
+                    <h5 data-translate="upload_photo">Upload Your Photo</h5>
+                    <div id="photoPlaceholder" class="text-center">
+                        <?php if (!empty($data['photo'])): ?>
+                            <img src="assets/images/<?php echo htmlspecialchars($data['photo']); ?>" id="photoPreview" class="img-fluid rounded shadow" style="max-width: 100%;">
                         <?php else: ?>
-                            <p>Click here to add your photo</p>
+                            <p data-translate="click_to_add_photo">Click here to add your photo</p>
+                            <i class="fas fa-user-circle" style="font-size: 80px; color: #ccc;"></i>
                         <?php endif; ?>
                     </div>
-                    <input type="file" name="photo" id="photoInput" style="display: none;">
+                    <input type="file" name="photo" id="photoInput" style="display: none;" accept="image/*">
+                    <div class="mt-3 text-center">
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="removePhoto" data-translate="remove_photo">Remove Photo</button>
+                        <small class="text-muted" data-translate="photo_requirements">Recommended size: 300x400px</small>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Change God Image Modal -->
     <div class="modal fade" id="changeGodImageModal" tabindex="-1" aria-labelledby="changeGodImageLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="changeGodImageLabel">Select God Image</h5>
+                    <h5 class="modal-title" data-translate="select_god_image">Select God Image</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row">
                         <?php
-                        $god_images = ['ganesh.png', 'krishna.png', 'shiva.png']; // Add more as needed
+                        $god_images = ['ganesh.png', 'krishna.png', 'shiva.png', 'durga.png', 'sai-baba.png'];
                         foreach ($god_images as $img):
                         ?>
-                            <div class="col-4">
-                                <img src="assets/images/gods/<?php echo $img; ?>" class="img-fluid god-image-option" style="cursor: pointer;" alt="<?php echo basename($img, '.png'); ?>">
+                            <div class="col-4 mb-3">
+                                <img src="assets/images/gods/<?php echo htmlspecialchars($img); ?>" class="img-fluid god-image-option" style="cursor: pointer; max-height: 150px; object-fit: contain;" alt="<?php echo htmlspecialchars(basename($img, '.png')); ?>" data-image="<?php echo htmlspecialchars($img); ?>">
+                                <p class="text-center mt-2"><?php echo htmlspecialchars(ucfirst(basename($img, '.png'))); ?></p>
                             </div>
                         <?php endforeach; ?>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-translate="close">Close</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Add Custom Heading Modal -->
     <div class="modal fade" id="addCustomHeadingModal" tabindex="-1" aria-labelledby="addCustomHeadingLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="addCustomHeadingLabel">Add Custom Heading</h5>
+                    <h5 class="modal-title" data-translate="add_custom_heading">Add Custom Heading</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <input type="text" class="form-control" id="customHeadingInput">
+                    <input type="text" class="form-control" id="customHeadingInput" placeholder="Enter custom heading">
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="saveCustomHeading">Save</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-translate="cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveCustomHeading" data-translate="save">Save</button>
                 </div>
             </div>
         </div>
@@ -591,168 +921,282 @@ function calculateBrightness($image)
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Language Switching (Placeholder)
-        let currentLang = 'English';
         const translations = {
-            English: {
-                'Biodata': 'Biodata',
-                'Family Details': 'Family Details',
-                'Contact Details': 'Contact Details',
-                'Add Field': 'Add Field',
-                'Reset Form': 'Reset Form',
-                'Create Biodata': 'Create Biodata'
+            en: {
+                'title': 'Customize Your Biodata',
+                'select_language': 'Select Language:',
+                'change_god_photo': 'Change God Photo',
+                'remove_god_photo': 'Remove God Photo',
+                'god_names': 'God Name(s)',
+                'add_god_name': 'Add God Name',
+                'biodata_title': 'Title:',
+                'add_custom_heading': 'Add Custom Heading',
+                'biodata_section': 'Biodata',
+                'family_details': 'Family Details',
+                'contact_details': 'Contact Details',
+                'add_field': 'Add Field',
+                'reset_form': 'Reset Form',
+                'create_biodata': 'Create Biodata',
+                'upload_photo': 'Upload Your Photo',
+                'click_to_add_photo': 'Click here to add your photo',
+                'click_to_add_god_image': 'Click to add god image',
+                'photo_requirements': 'Recommended size: 300x400px',
+                'select_god_image': 'Select God Image',
+                'close': 'Close',
+                'cancel': 'Cancel',
+                'save': 'Save',
+                'remove_photo': 'Remove Photo'
             },
-            Marathi: {
-                'Biodata': 'बायोडाटा',
-                'Family Details': 'कौटुंबिक माहिती',
-                'Contact Details': 'संपर्क माहिती',
-                'Add Field': 'फील्ड जोडा',
-                'Reset Form': 'फॉर्म रीसेट करा',
-                'Create Biodata': 'बायोडाटा तयार करा'
+            mr: {
+                'title': 'तुमचे बायोडाटा सानुकूलित करा',
+                'select_language': 'भाषा निवडा:',
+                'change_god_photo': 'देवाचे फोटो बदला',
+                'remove_god_photo': 'देवाचे फोटो काढून टाका',
+                'god_names': 'देवाचे नाव(ने)',
+                'add_god_name': 'देवाचे नाव जोडा',
+                'biodata_title': 'शीर्षक:',
+                'add_custom_heading': 'सानुकूल शीर्षक जोडा',
+                'biodata_section': 'बायोडाटा',
+                'family_details': 'कौटुंबिक माहिती',
+                'contact_details': 'संपर्क माहिती',
+                'add_field': 'फील्ड जोडा',
+                'reset_form': 'फॉर्म रीसेट करा',
+                'create_biodata': 'बायोडाटा तयार करा',
+                'upload_photo': 'तुमचे फोटो अपलोड करा',
+                'click_to_add_photo': 'फोटो जोडण्यासाठी येथे क्लिक करा',
+                'click_to_add_god_image': 'देवाचे प्रतिमा जोडण्यासाठी क्लिक करा',
+                'photo_requirements': 'शिफारस केलेले आकार: 300x400px',
+                'select_god_image': 'देवाचे प्रतिमा निवडा',
+                'close': 'बंद करा',
+                'cancel': 'रद्द करा',
+                'save': 'जतन करा',
+                'remove_photo': 'फोटो काढून टाका'
             }
         };
 
+        let currentLang = 'en';
+
         function updateLanguage(lang) {
             currentLang = lang;
-            document.querySelectorAll('h3').forEach(h => {
-                h.textContent = translations[lang][h.textContent] || h.textContent;
+            document.querySelectorAll('[data-translate]').forEach(el => {
+                const key = el.getAttribute('data-translate');
+                if (translations[lang][key]) {
+                    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                        el.placeholder = translations[lang][key];
+                    } else {
+                        el.textContent = translations[lang][key];
+                    }
+                }
             });
-            document.querySelectorAll('.btn-success').forEach(btn => {
-                btn.textContent = translations[lang]['Add Field'];
+
+            document.querySelectorAll('.key-input').forEach(input => {
+                const enValue = input.getAttribute('data-lang-en');
+                const mrValue = input.getAttribute('data-lang-mr');
+                input.value = lang === 'en' ? enValue : mrValue;
             });
-            document.getElementById('resetForm').textContent = translations[lang]['Reset Form'];
-            document.getElementById('createBiodata').textContent = translations[lang]['Create Biodata'];
+
+            document.querySelectorAll('.value-input.form-select option').forEach(option => {
+                const enValue = option.getAttribute('data-lang-en');
+                const mrValue = option.getAttribute('data-lang-mr');
+                option.textContent = lang === 'en' ? enValue : mrValue;
+            });
+
+            document.getElementById('currentLanguage').value = lang;
+            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`lang-${lang === 'en' ? 'english' : 'marathi'}`).classList.add('active');
         }
 
-        document.getElementById('lang-english').addEventListener('click', () => updateLanguage('English'));
-        document.getElementById('lang-marathi').addEventListener('click', () => updateLanguage('Marathi'));
+        document.addEventListener('DOMContentLoaded', () => {
+            updateLanguage('en');
+            document.getElementById('lang-english').addEventListener('click', () => updateLanguage('en'));
+            document.getElementById('lang-marathi').addEventListener('click', () => updateLanguage('mr'));
 
-        // God Image Handling
-        document.querySelectorAll('.god-image-option').forEach(img => {
-            img.addEventListener('click', function() {
-                document.getElementById('godImagePreview').src = this.src;
-                document.getElementById('godImagePreview').style.display = 'block';
-                document.getElementById('godImageInput').dataset.path = this.src.split('/').pop();
-                bootstrap.Modal.getInstance(document.getElementById('changeGodImageModal')).hide();
+            const godImagePreview = document.getElementById('godImagePreview');
+            const godImagePlaceholder = document.getElementById('godImagePlaceholder');
+
+            document.querySelectorAll('.god-image-option').forEach(img => {
+                img.addEventListener('click', function() {
+                    const imgPath = this.getAttribute('data-image');
+                    if (godImagePreview) {
+                        godImagePreview.src = `assets/images/gods/${imgPath}`;
+                        godImagePreview.style.display = 'block';
+                    } else {
+                        const img = document.createElement('img');
+                        img.id = 'godImagePreview';
+                        img.src = `assets/images/gods/${imgPath}`;
+                        img.className = 'img-fluid rounded-circle shadow';
+                        img.style.maxWidth = '120px';
+                        img.style.height = '120px';
+                        img.style.objectFit = 'cover';
+                        document.querySelector('.mb-4.text-center').insertBefore(img, document.querySelector('.mt-3'));
+                    }
+                    if (godImagePlaceholder) godImagePlaceholder.style.display = 'none';
+                    document.getElementById('selectedGodImage').value = imgPath;
+                    document.getElementById('godImageInput').value = '';
+                    document.getElementById('removeGodImageInput').value = '0'; // Reset remove flag
+                    bootstrap.Modal.getInstance(document.getElementById('changeGodImageModal')).hide();
+                });
             });
-        });
 
-        document.getElementById('removeGodImage').addEventListener('click', () => {
-            document.getElementById('godImagePreview').style.display = 'none';
-            document.getElementById('godImageInput').value = '';
-        });
-
-        // God Names Handling
-        document.getElementById('addGodName').addEventListener('click', () => {
-            const row = document.createElement('div');
-            row.className = 'field-row god-name-row';
-            row.innerHTML = `
-                <div class="move-btns">
-                    <button type="button" class="btn btn-sm btn-secondary move-up"><i class="fas fa-arrow-up"></i></button>
-                    <button type="button" class="btn btn-sm btn-secondary move-down"><i class="fas fa-arrow-down"></i></button>
-                </div>
-                <div class="delete-btn">
-                    <button type="button" class="btn btn-sm btn-danger delete-god-name"><i class="fas fa-trash"></i></button>
-                </div>
-                <input type="text" name="god_names[]" class="form-control">
-            `;
-            document.getElementById('godNames').appendChild(row);
-        });
-
-        document.addEventListener('click', e => {
-            if (e.target.closest('.delete-god-name')) {
-                e.target.closest('.god-name-row').remove();
-            }
-        });
-
-        // Field Handling
-        function addField(section) {
-            const fields = document.getElementById(section + 'Fields');
-            const row = document.createElement('div');
-            row.className = 'field-row';
-            row.innerHTML = `
-                <div class="move-btns">
-                    <button type="button" class="btn btn-sm btn-secondary move-up"><i class="fas fa-arrow-up"></i></button>
-                    <button type="button" class="btn btn-sm btn-secondary move-down"><i class="fas fa-arrow-down"></i></button>
-                </div>
-                <div class="delete-btn">
-                    <button type="button" class="btn btn-sm btn-danger delete-field"><i class="fas fa-trash"></i></button>
-                </div>
-                <input type="text" name="${section}_keys[]" class="form-control key-input" placeholder="Key">
-                <input type="text" name="${section}_values[]" class="form-control value-input" placeholder="Value">
-            `;
-            fields.appendChild(row);
-        }
-
-        document.getElementById('addBiodataField').addEventListener('click', () => addField('biodata'));
-        document.getElementById('addFamilyField').addEventListener('click', () => addField('family'));
-        document.getElementById('addContactField').addEventListener('click', () => addField('contact'));
-
-        document.addEventListener('click', e => {
-            if (e.target.closest('.delete-field')) {
-                e.target.closest('.field-row').remove();
-            }
-            if (e.target.closest('.move-up')) {
-                const row = e.target.closest('.field-row');
-                const prev = row.previousElementSibling;
-                if (prev) row.parentNode.insertBefore(row, prev);
-            }
-            if (e.target.closest('.move-down')) {
-                const row = e.target.closest('.field-row');
-                const next = row.nextElementSibling;
-                if (next) row.parentNode.insertBefore(next, row);
-            }
-        });
-
-        // Custom Heading
-        document.getElementById('saveCustomHeading').addEventListener('click', () => {
-            const heading = document.getElementById('customHeadingInput').value;
-            if (heading) {
-                const select = document.getElementById('biodata_title');
-                const option = document.createElement('option');
-                option.value = heading;
-                option.text = heading;
-                select.add(option);
-                select.value = heading;
-                bootstrap.Modal.getInstance(document.getElementById('addCustomHeadingModal')).hide();
-            }
-        });
-
-        // Photo Upload
-        document.getElementById('photoPlaceholder').addEventListener('click', () => {
-            document.getElementById('photoInput').click();
-        });
-        document.getElementById('photoInput').addEventListener('change', function() {
-            const file = this.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = e => {
-                    const img = document.createElement('img');
-                    img.src = e.target.result;
-                    img.id = 'photoPreview';
-                    img.className = 'img-fluid';
-                    img.style.maxWidth = '100%';
-                    const placeholder = document.getElementById('photoPlaceholder');
-                    placeholder.innerHTML = '';
-                    placeholder.appendChild(img);
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-
-        // Reset Form
-        document.getElementById('resetForm').addEventListener('click', () => {
-            document.querySelectorAll('.value-input').forEach(input => {
-                input.value = input.dataset.default || '';
+            document.getElementById('godImageInput').addEventListener('change', function() {
+                const file = this.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        if (godImagePreview) {
+                            godImagePreview.src = e.target.result;
+                            godImagePreview.style.display = 'block';
+                        } else {
+                            const img = document.createElement('img');
+                            img.id = 'godImagePreview';
+                            img.src = e.target.result;
+                            img.className = 'img-fluid rounded-circle shadow';
+                            img.style.maxWidth = '120px';
+                            img.style.height = '120px';
+                            img.style.objectFit = 'cover';
+                            document.querySelector('.mb-4.text-center').insertBefore(img, document.querySelector('.mt-3'));
+                        }
+                        if (godImagePlaceholder) godImagePlaceholder.style.display = 'none';
+                        document.getElementById('selectedGodImage').value = '';
+                        document.getElementById('removeGodImageInput').value = '0'; // Reset remove flag
+                    };
+                    reader.readAsDataURL(file);
+                }
             });
-            document.getElementById('godNames').innerHTML = '<?php echo $data['god_name'] ? '<div class="field-row god-name-row"><div class="move-btns"><button type="button" class="btn btn-sm btn-secondary move-up"><i class="fas fa-arrow-up"></i></button><button type="button" class="btn btn-sm btn-secondary move-down"><i class="fas fa-arrow-down"></i></button></div><div class="delete-btn"><button type="button" class="btn btn-sm btn-danger delete-god-name"><i class="fas fa-trash"></i></button></div><input type="text" name="god_names[]" class="form-control" value="' . $data['god_name'] . '"></div>' : ''; ?>';
-            document.getElementById('photoPreview')?.remove();
-            document.getElementById('photoPlaceholder').innerHTML = '<p>Click here to add your photo</p>';
-            document.getElementById('photoInput').value = '';
-            <?php if ($data['god_image']): ?>
-                document.getElementById('godImagePreview').src = 'assets/images/<?php echo $data['god_image']; ?>';
-                document.getElementById('godImagePreview').style.display = 'block';
-            <?php endif; ?>
+
+            document.getElementById('removeGodImage').addEventListener('click', () => {
+                if (godImagePreview) godImagePreview.style.display = 'none';
+                if (godImagePlaceholder) godImagePlaceholder.style.display = 'block';
+                document.getElementById('godImageInput').value = '';
+                document.getElementById('selectedGodImage').value = '';
+                document.getElementById('removeGodImageInput').value = '1';
+            });
+
+            document.getElementById('addGodName').addEventListener('click', () => {
+                const row = document.createElement('div');
+                row.className = 'field-row god-name-row';
+                row.innerHTML = `
+                    <input type="text" name="god_names[]" class="form-control" placeholder="${translations[currentLang]['add_god_name']}">
+                    <div class="field-actions">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-outline-secondary btn-icon move-up">
+                                <i class="fas fa-arrow-up"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary btn-icon move-down">
+                                <i class="fas fa-arrow-down"></i>
+                            </button>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-danger btn-icon delete-god-name">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+                document.getElementById('godNames').appendChild(row);
+            });
+
+            function addField(section) {
+                const containerId = `${section}Fields`;
+                const fields = document.getElementById(containerId);
+                const row = document.createElement('div');
+                row.className = 'field-row';
+                row.innerHTML = `
+                    <input type="text" name="${section}_keys[]" class="form-control key-input" placeholder="${translations[currentLang]['add_field']}" data-lang-en="New Field" data-lang-mr="नवीन फील्ड">
+                    <input type="text" name="${section}_values[]" class="form-control value-input" placeholder="Value">
+                    <div class="field-actions">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-outline-secondary btn-icon move-up">
+                                <i class="fas fa-arrow-up"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary btn-icon move-down">
+                                <i class="fas fa-arrow-down"></i>
+                            </button>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-danger btn-icon delete-field">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+                fields.appendChild(row);
+            }
+
+            document.getElementById('addBiodataField').addEventListener('click', () => addField('biodata'));
+            document.getElementById('addFamilyField').addEventListener('click', () => addField('family'));
+            document.getElementById('addContactField').addEventListener('click', () => addField('contact'));
+
+            document.addEventListener('click', e => {
+                if (e.target.closest('.delete-field') || e.target.closest('.delete-god-name')) {
+                    e.target.closest('.field-row').remove();
+                }
+                if (e.target.closest('.move-up')) {
+                    const row = e.target.closest('.field-row');
+                    const prev = row.previousElementSibling;
+                    if (prev) row.parentNode.insertBefore(row, prev);
+                }
+                if (e.target.closest('.move-down')) {
+                    const row = e.target.closest('.field-row');
+                    const next = row.nextElementSibling;
+                    if (next) row.parentNode.insertBefore(next, row);
+                }
+                if (e.target.closest('[data-bs-target="#addCustomHeadingModal"]')) {
+                    const section = e.target.getAttribute('data-section');
+                    document.getElementById('saveCustomHeading').setAttribute('data-section', section);
+                }
+            });
+
+            document.getElementById('saveCustomHeading').addEventListener('click', () => {
+                const heading = document.getElementById('customHeadingInput').value.trim();
+                const section = document.getElementById('saveCustomHeading').getAttribute('data-section');
+                if (heading && section) {
+                    const select = document.getElementById(`${section}_title`);
+                    const option = document.createElement('option');
+                    option.value = heading;
+                    option.textContent = heading;
+                    select.appendChild(option);
+                    select.value = heading;
+                    bootstrap.Modal.getInstance(document.getElementById('addCustomHeadingModal')).hide();
+                    document.getElementById('customHeadingInput').value = '';
+                }
+            });
+
+            document.getElementById('photoPlaceholder').addEventListener('click', () => {
+                document.getElementById('photoInput').click();
+            });
+
+            document.getElementById('photoInput').addEventListener('change', function() {
+                const file = this.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        const placeholder = document.getElementById('photoPlaceholder');
+                        placeholder.innerHTML = '';
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.id = 'photoPreview';
+                        img.className = 'img-fluid rounded shadow';
+                        img.style.maxWidth = '100%';
+                        placeholder.appendChild(img);
+                        document.getElementById('removePhotoInput').value = '0'; // Reset remove flag
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            document.getElementById('removePhoto').addEventListener('click', () => {
+                const placeholder = document.getElementById('photoPlaceholder');
+                placeholder.innerHTML = '<p data-translate="click_to_add_photo">Click here to add your photo</p><i class="fas fa-user-circle" style="font-size: 80px; color: #ccc;"></i>';
+                document.getElementById('photoInput').value = '';
+                document.getElementById('removePhotoInput').value = '1';
+            });
+
+            document.getElementById('resetForm').addEventListener('click', () => {
+                if (confirm(translations[currentLang]['confirm_reset'] || 'Are you sure you want to reset the form?')) {
+                    window.location.reload();
+                }
+            });
+
+            document.getElementById('customizeForm').addEventListener('submit', function(e) {
+                document.getElementById('currentLanguage').value = currentLang;
+            });
         });
     </script>
 </body>
