@@ -33,31 +33,41 @@ $god_names = $data['god_name'] ? explode('|', $data['god_name']) : [''];
 
 // Marathi translations for common fields
 $mr_translations = [
-    'Name' => 'नाव',
+    'Full Name' => 'नाव',
     'Date of Birth' => 'जन्मतारीख',
     'Time of Birth' => 'जन्मवेळ',
     'Place of Birth' => 'जन्मस्थळ',
     'Height' => 'उंची',
     'Weight' => 'वजन',
+    'Kuldivat' => 'कुलदैवत',
     'Education' => 'शिक्षण',
+    'Relationship' => 'नाते',
     'Occupation' => 'व्यवसाय',
+    "Salary/Income" => 'पगार/उत्पन्न',
+    "Mobile Number" => 'मोबाईल नंबर',
+    "Job/Business" => 'नोकरी/व्यवसाय',
     'Income' => 'उत्पन्न',
     'Father' => 'वडील',
-    'Mother' => 'आई',
-    'Brothers' => 'भाऊ',
-    'Sisters' => 'बहीण',
+    'Uncle' => 'काका',
+    'Brother' => 'भाऊ',
+    'Sister' => 'बहीण',
     'Address' => 'पत्ता',
     'Mobile' => 'मोबाईल',
     'Email' => 'ईमेल',
     'Religion' => 'धर्म',
-    'Zodiac sign' => 'राशी',
+    'Zodiac Sign' => 'राशी',
     'Constellation' => 'नक्षत्र',
     'Clan' => 'कुळ',
+    'Caste' => 'जात',
     'Pulse' => 'नाडी',
     'Manglik' => 'मंगळिक',
     'Tribe' => 'जमात',
     'Character' => 'स्वभाव',
-    'Blood type' => 'रक्त गट'
+    'Blood Type' => 'रक्त गट',
+    "Mother's Name" => 'आईचे नाव',
+    "Father's Name" => 'वडिलांचे नाव',
+    "Father's Profession" => 'वडिलांचा व्यवसाय',
+    "Mother's Profession" => 'आईचा व्यवसाय',
 ];
 
 // Dropdown options with translations
@@ -66,7 +76,7 @@ $dropdown_options = [
         'en' => ['Hindu', 'Muslim', 'Christian', 'Sikh', 'Buddhist', 'Jain', 'Other'],
         'mr' => ['हिंदू', 'मुस्लिम', 'ख्रिश्चन', 'शीख', 'बौद्ध', 'जैन', 'इतर']
     ],
-    'Zodiac sign' => [
+    'Zodiac Sign' => [
         'en' => ['Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'],
         'mr' => ['मेष', 'वृषभ', 'मिथुन', 'कर्क', 'सिंह', 'कन्या', 'तुला', 'वृश्चिक', 'धनु', 'मकर', 'कुंभ', 'मीन']
     ],
@@ -98,7 +108,7 @@ $dropdown_options = [
         'en' => ['Calm', 'Energetic', 'Friendly', 'Reserved', 'Outgoing'],
         'mr' => ['शांत', 'उत्साही', 'मैत्रीपूर्ण', 'संयमित', 'बाहेर जाणारा']
     ],
-    'Blood type' => [
+    'Blood Type' => [
         'en' => ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
         'mr' => ['ए+', 'ए-', 'बी+', 'बी-', 'एबी+', 'एबी-', 'ओ+', 'ओ-']
     ]
@@ -112,14 +122,13 @@ function generatePreviewImage($god_image, $god_name, $biodata, $family_details, 
 
     $scale_factor = 3.125; // 2480/794 ≈ 3.125
 
-    $padding_left_right = 90 * $scale_factor;  // Original: 90
-    $padding_top_bottom = 30 * $scale_factor;  // Original: 30
-    $reserved_top_area = 150 * $scale_factor;  // Original: 150
-
+    $padding_left_right = 90 * $scale_factor;
+    $padding_top_bottom = 30 * $scale_factor;
+    $reserved_top_area = 150 * $scale_factor;
 
     $canvas = imagecreatetruecolor($width, $height);
-    imageantialias($canvas, true); // Enable antialiasing
-    imagesetthickness($canvas, 1); // Optional: Set line thickness for better qualit
+    imageantialias($canvas, true);
+    imagesetthickness($canvas, 1);
     $bg_path = __DIR__ . '/assets/images/' . $background_image;
     if (!file_exists($bg_path)) die("Background image not found: $bg_path");
     $bg = loadImage($bg_path);
@@ -135,9 +144,8 @@ function generatePreviewImage($god_image, $god_name, $biodata, $family_details, 
         if (!file_exists($god_image_path)) die("God image not found: $god_image_path");
         $god_img = loadImage($god_image_path);
         if ($god_img) {
-            // Scale up the dimensions proportionally (original was 100x100)
-            $max_width = 312;  // 100 * 3.125
-            $max_height = 312; // 100 * 3.125
+            $max_width = 312;
+            $max_height = 312;
 
             $orig_width = imagesx($god_img);
             $orig_height = imagesy($god_img);
@@ -145,11 +153,9 @@ function generatePreviewImage($god_image, $god_name, $biodata, $family_details, 
             $new_width = (int)($orig_width * $ratio);
             $new_height = (int)($orig_height * $ratio);
 
-            // Adjust positioning to match new dimensions
             $x = (int)(($width - $new_width) / 2);
             $y = $padding_top_bottom + (int)(($reserved_top_area - $new_height) / 2);
 
-            // Use imagecopyresampled for better quality scaling
             imagecopyresampled($canvas, $god_img, $x, $y, 0, 0, $new_width, $new_height, $orig_width, $orig_height);
             imagedestroy($god_img);
         } else {
@@ -180,10 +186,10 @@ function generatePreviewImage($god_image, $god_name, $biodata, $family_details, 
     $elements_height += $contact_height;
 
     $scale = $elements_height > $max_content_height ? $max_content_height / $elements_height : 1;
-    $base_font_size = 10 * $scale_factor;      // Original: 10
-    $god_name_size = 16 * $scale_factor;       // Original: 16
-    $title_size = 14 * $scale_factor;          // Original: 14
-    $line_height = 15 * $scale_factor;         // Original: 15
+    $base_font_size = 10 * $scale_factor;
+    $god_name_size = 16 * $scale_factor;
+    $title_size = 14 * $scale_factor;
+    $line_height = 15 * $scale_factor;
 
     $text_section_width = $content_width * 0.7;
 
@@ -210,8 +216,8 @@ function generatePreviewImage($god_image, $god_name, $biodata, $family_details, 
         if (!file_exists($photo_path)) die("Person photo not found: $photo_path");
         $person_img = loadImage($photo_path);
         if ($person_img) {
-            $target_width = 130 * $scale_factor;       // Original: 130
-            $target_height = 173 * $scale_factor;      // Original: 173
+            $target_width = 130 * $scale_factor;
+            $target_height = 173 * $scale_factor;
             $photo_x = $width - $padding_left_right - $target_width;
             $photo_y = $padding_top_bottom + $reserved_top_area + 20;
             imagecopyresampled($canvas, $person_img, $photo_x, $photo_y, 0, 0, $target_width, $target_height, imagesx($person_img), imagesy($person_img));
@@ -231,7 +237,12 @@ function generatePreviewImage($god_image, $god_name, $biodata, $family_details, 
 function drawSection($canvas, $title, $data, $current_y, $title_size, $font_size, $font_bold, $font_regular, $padding, $text_width, $line_height, $color, $scale)
 {
     $box = imagettfbbox($title_size, 0, $font_bold, $title);
-    $x = (int)((794 - ($box[2] - $box[0])) / 2);
+    // Ensure $width is assigned a value
+    $width = 794; // Replace 794 with the appropriate value for your context
+
+    // Now use $width in the calculation
+    $x = (int)(($width - ($box[2] - $box[0])) / 2); // Center title
+
     imagettftext($canvas, $title_size, 0, $x, $current_y, $color, $font_bold, $title);
     $current_y += $title_size + 15 * $scale;
 
@@ -395,12 +406,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $biodata_post[$key] = $_POST['biodata_values'][$i];
         }
     }
+
     $family_post = [];
     foreach ($_POST['family_keys'] as $i => $key) {
         if ($key && isset($_POST['family_values'][$i]) && $_POST['family_values'][$i]) {
             $family_post[$key] = $_POST['family_values'][$i];
         }
     }
+
     $contact_post = [];
     foreach ($_POST['contact_keys'] as $i => $key) {
         if ($key && isset($_POST['contact_values'][$i]) && $_POST['contact_values'][$i]) {
@@ -408,11 +421,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     }
 
-    $biodata_title = isset($_POST['biodata_title']) ? $_POST['biodata_title'] : 'BIODATA';
-    $family_title = isset($_POST['family_title']) ? $_POST['family_title'] : 'Family Details';
-    $contact_title = isset($_POST['contact_title']) ? $_POST['contact_title'] : 'Contact Details';
+    $biodata_title = isset($_POST['biodata_title']) ? $_POST['biodata_title'] : ($language == 'mr' ? 'बायोडाटा' : 'BIODATA');
+    $family_title = isset($_POST['family_title']) ? $_POST['family_title'] : ($language == 'mr' ? 'कौटुंबिक माहिती' : 'Family Details');
+    $contact_title = isset($_POST['contact_title']) ? $_POST['contact_title'] : ($language == 'mr' ? 'संपर्क माहिती' : 'Contact Details');
 
-    // Use the background image from the original template
     $background_image = $data['background_image'];
 
     $preview_image = generatePreviewImage(
@@ -734,7 +746,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                             value="<?php echo htmlspecialchars($key); ?>"
                                             data-lang-en="<?php echo htmlspecialchars($key); ?>"
                                             data-lang-mr="<?php echo htmlspecialchars($mr_translations[$key] ?? $key); ?>">
-                                        <select name="biodata_values[]" class="form-select value-input">
+                                        <select class="form-select value-input" data-key="<?php echo htmlspecialchars($key); ?>">
                                             <?php foreach ($dropdown_options[$key]['en'] as $index => $option): ?>
                                                 <option value="<?php echo htmlspecialchars($option); ?>"
                                                     data-lang-en="<?php echo htmlspecialchars($option); ?>"
@@ -744,6 +756,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                                 </option>
                                             <?php endforeach; ?>
                                         </select>
+                                        <input type="hidden" name="biodata_values[]" class="hidden-value"
+                                            value="<?php echo htmlspecialchars($value); ?>">
                                     <?php else: ?>
                                         <input type="text" name="biodata_keys[]" class="form-control key-input"
                                             value="<?php echo htmlspecialchars($key); ?>"
@@ -958,7 +972,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 'close': 'Close',
                 'cancel': 'Cancel',
                 'save': 'Save',
-                'remove_photo': 'Remove Photo'
+                'remove_photo': 'Remove Photo',
             },
             mr: {
                 'title': 'तुमचे बायोडाटा सानुकूलित करा',
@@ -983,9 +997,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 'close': 'बंद करा',
                 'cancel': 'रद्द करा',
                 'save': 'जतन करा',
-                'remove_photo': 'फोटो काढून टाका'
+                'remove_photo': 'फोटो काढून टाका',
             }
         };
+
+        const dropdownOptions = <?php echo json_encode($dropdown_options); ?>;
 
         let currentLang = 'en';
 
@@ -1002,16 +1018,35 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 }
             });
 
+            // Update key inputs
             document.querySelectorAll('.key-input').forEach(input => {
                 const enValue = input.getAttribute('data-lang-en');
                 const mrValue = input.getAttribute('data-lang-mr');
                 input.value = lang === 'en' ? enValue : mrValue;
             });
 
-            document.querySelectorAll('.value-input.form-select option').forEach(option => {
-                const enValue = option.getAttribute('data-lang-en');
-                const mrValue = option.getAttribute('data-lang-mr');
-                option.textContent = lang === 'en' ? enValue : mrValue;
+            // Update dropdown displays and hidden values
+            document.querySelectorAll('.value-input.form-select').forEach(select => {
+                const key = select.getAttribute('data-key');
+                if (dropdownOptions[key]) {
+                    const selectedValue = select.value;
+                    const options = select.options;
+                    for (let i = 0; i < options.length; i++) {
+                        const enValue = options[i].getAttribute('data-lang-en');
+                        const mrValue = options[i].getAttribute('data-lang-mr');
+                        options[i].textContent = lang === 'en' ? enValue : mrValue;
+                    }
+                    // Update hidden input with the correct language value
+                    const hiddenInput = select.nextElementSibling;
+                    if (hiddenInput && hiddenInput.classList.contains('hidden-value')) {
+                        const index = dropdownOptions[key].en.indexOf(selectedValue);
+                        if (index !== -1) {
+                            hiddenInput.value = lang === 'en' ?
+                                dropdownOptions[key].en[index] :
+                                dropdownOptions[key].mr[index];
+                        }
+                    }
+                }
             });
 
             document.getElementById('currentLanguage').value = lang;
@@ -1023,6 +1058,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             updateLanguage('en');
             document.getElementById('lang-english').addEventListener('click', () => updateLanguage('en'));
             document.getElementById('lang-marathi').addEventListener('click', () => updateLanguage('mr'));
+
+            // Handle dropdown changes
+            document.querySelectorAll('.value-input.form-select').forEach(select => {
+                select.addEventListener('change', function() {
+                    const key = this.getAttribute('data-key');
+                    const selectedValue = this.value;
+                    const hiddenInput = this.nextElementSibling;
+                    if (hiddenInput && hiddenInput.classList.contains('hidden-value')) {
+                        const index = dropdownOptions[key].en.indexOf(selectedValue);
+                        if (index !== -1) {
+                            hiddenInput.value = currentLang === 'en' ?
+                                dropdownOptions[key].en[index] :
+                                dropdownOptions[key].mr[index];
+                        }
+                    }
+                });
+            });
 
             const godImagePreview = document.getElementById('godImagePreview');
             const godImagePlaceholder = document.getElementById('godImagePlaceholder');
@@ -1046,7 +1098,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     if (godImagePlaceholder) godImagePlaceholder.style.display = 'none';
                     document.getElementById('selectedGodImage').value = imgPath;
                     document.getElementById('godImageInput').value = '';
-                    document.getElementById('removeGodImageInput').value = '0'; // Reset remove flag
+                    document.getElementById('removeGodImageInput').value = '0';
                     bootstrap.Modal.getInstance(document.getElementById('changeGodImageModal')).hide();
                 });
             });
@@ -1071,7 +1123,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         }
                         if (godImagePlaceholder) godImagePlaceholder.style.display = 'none';
                         document.getElementById('selectedGodImage').value = '';
-                        document.getElementById('removeGodImageInput').value = '0'; // Reset remove flag
+                        document.getElementById('removeGodImageInput').value = '0';
                     };
                     reader.readAsDataURL(file);
                 }
@@ -1188,7 +1240,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         img.className = 'img-fluid rounded shadow';
                         img.style.maxWidth = '100%';
                         placeholder.appendChild(img);
-                        document.getElementById('removePhotoInput').value = '0'; // Reset remove flag
+                        document.getElementById('removePhotoInput').value = '0';
                     };
                     reader.readAsDataURL(file);
                 }
