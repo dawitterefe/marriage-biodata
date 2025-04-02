@@ -159,14 +159,15 @@ if (isset($_POST['template_id'])) {
     exit;
 }
 
+
 // Handle payment form
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['phone'])) {
     $user_identifier = $_SERVER['REMOTE_ADDR'] . '-' . session_id();
-    $stmt = $pdo->prepare("INSERT INTO payments (customized_biodata_id, user_identifier, phone_number) VALUES (?, ?, ?)");
+    // For now, set payment_status to 'completed' for testing; in production, use 'pending' and integrate a payment gateway
+    $stmt = $pdo->prepare("INSERT INTO payments (customized_biodata_id, user_identifier, phone_number, payment_status) VALUES (?, ?, ?, 'completed')");
     $stmt->execute([$customized_id, $user_identifier, $_POST['phone']]);
     $payment_id = $pdo->lastInsertId();
-    // Redirect to payment gateway (placeholder)
-    header("Location: payment.php?payment_id=$payment_id");
+    header("Location: download.php?payment_id=$payment_id");
     exit;
 }
 
