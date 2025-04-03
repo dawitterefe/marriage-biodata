@@ -495,6 +495,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <title data-translate="title">Customize Biodata</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
     <style>
         :root {
             --gradient-primary: linear-gradient(135deg, #4e54c8 0%, #8f94fb 100%);
@@ -647,6 +648,55 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .god-image-option:hover {
             transform: scale(1.05);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+
+        /* Add new styles for cropping modal */
+        .cropper-modal {
+            background: rgba(0, 0, 0, 0.8);
+        }
+
+        .cropper-view-box {
+            outline: 2px solid #4e54c8;
+            outline-color: rgba(78, 84, 200, 0.75);
+        }
+
+        .cropper-dashed {
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .zoom-slider {
+            width: 100%;
+            margin: 15px 0;
+            -webkit-appearance: none;
+            height: 6px;
+            background: #ddd;
+            border-radius: 3px;
+        }
+
+        .zoom-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #4e54c8;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .cropper-container {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+
+        #cropperWrapper {
+            max-width: 600px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .cropper-controls {
+            text-align: center;
+            margin-top: 20px;
         }
     </style>
 </head>
@@ -946,7 +996,32 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </div>
     </div>
 
+    <!-- Add cropping modal -->
+    <div class="modal fade" id="cropModal" tabindex="-1" aria-labelledby="cropModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" data-translate="crop_photo">Crop Photo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="cropperWrapper">
+                        <img id="cropperImage" src="#" alt="Crop preview" style="max-width: 100%;">
+                    </div>
+                    <div class="cropper-controls">
+                        <input type="range" class="zoom-slider" id="zoomSlider" min="0" max="1" step="0.1" value="0">
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-translate="cancel">Cancel</button>
+                            <button type="button" class="btn btn-primary" id="cropButton" data-translate="crop">Crop</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
     <script>
         const translations = {
             en: {
@@ -1000,6 +1075,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 'remove_photo': 'फोटो काढून टाका',
             }
         };
+
+        translations.en.crop_photo = 'Crop Photo';
+        translations.en.crop = 'Crop';
+        translations.mr.crop_photo = 'फोटो क्रॉप करा';
+        translations.mr.crop = 'क्रॉप करा';
+
+        let cropper;
+        let originalImageUrl;
 
         const dropdownOptions = <?php echo json_encode($dropdown_options); ?>;
 
@@ -1079,12 +1162,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             const godImagePreview = document.getElementById('godImagePreview');
             const godImagePlaceholder = document.getElementById('godImagePlaceholder');
 
+            // Fixed god image alignment
             document.querySelectorAll('.god-image-option').forEach(img => {
                 img.addEventListener('click', function() {
                     const imgPath = this.getAttribute('data-image');
-                    if (godImagePreview) {
-                        godImagePreview.src = `assets/images/gods/${imgPath}`;
-                        godImagePreview.style.display = 'block';
+                    const godImageContainer = document.querySelector('.god-image-container');
+
+                    if (!godImageContainer) {
+                        const container = document.createElement('div');
+                        container.className = 'god-image-container text-center';
+                        document.querySelector('.mb-4.text-center').prepend(container);
+                    }
+
+                    const existingImg = document.getElementById('godImagePreview');
+                    if (existingImg) {
+                        existingImg.src = `assets/images/gods/${imgPath}`;
                     } else {
                         const img = document.createElement('img');
                         img.id = 'godImagePreview';
@@ -1093,8 +1185,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         img.style.maxWidth = '120px';
                         img.style.height = '120px';
                         img.style.objectFit = 'cover';
-                        document.querySelector('.mb-4.text-center').insertBefore(img, document.querySelector('.mt-3'));
+                        document.querySelector('.god-image-container').appendChild(img);
                     }
+
                     if (godImagePlaceholder) godImagePlaceholder.style.display = 'none';
                     document.getElementById('selectedGodImage').value = imgPath;
                     document.getElementById('godImageInput').value = '';
@@ -1227,22 +1320,92 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 document.getElementById('photoInput').click();
             });
 
-            document.getElementById('photoInput').addEventListener('change', function() {
-                const file = this.files[0];
-                if (file) {
+            // Modified photo input handler
+            document.getElementById('photoInput').addEventListener('change', function(e) {
+                const files = e.target.files;
+                if (files && files.length > 0) {
+                    const file = files[0];
                     const reader = new FileReader();
-                    reader.onload = e => {
-                        const placeholder = document.getElementById('photoPlaceholder');
-                        placeholder.innerHTML = '';
-                        const img = document.createElement('img');
-                        img.src = e.target.result;
-                        img.id = 'photoPreview';
-                        img.className = 'img-fluid rounded shadow';
-                        img.style.maxWidth = '100%';
-                        placeholder.appendChild(img);
-                        document.getElementById('removePhotoInput').value = '0';
+
+                    reader.onload = (event) => {
+                        originalImageUrl = event.target.result;
+                        const cropModal = new bootstrap.Modal(document.getElementById('cropModal'));
+
+                        // Initialize cropper when modal is shown
+                        document.getElementById('cropModal').addEventListener('shown.bs.modal', () => {
+                            const image = document.getElementById('cropperImage');
+                            image.src = originalImageUrl;
+
+                            if (cropper) {
+                                cropper.destroy();
+                            }
+
+                            cropper = new Cropper(image, {
+                                aspectRatio: 3 / 4,
+                                viewMode: 1,
+                                autoCropArea: 1,
+                                background: false,
+                                guides: false,
+                                zoomOnWheel: false,
+                                ready() {
+                                    document.getElementById('zoomSlider').addEventListener('input', (e) => {
+                                        const value = parseFloat(e.target.value);
+                                        cropper.zoomTo(value);
+                                    });
+                                }
+                            });
+                        });
+
+                        // Cleanup when modal hides
+                        document.getElementById('cropModal').addEventListener('hidden.bs.modal', () => {
+                            if (cropper) {
+                                cropper.destroy();
+                                cropper = null;
+                            }
+                        });
+
+                        cropModal.show();
                     };
+
                     reader.readAsDataURL(file);
+                }
+            });
+
+            // Handle crop button click
+            document.getElementById('cropButton').addEventListener('click', () => {
+                if (cropper) {
+                    const canvas = cropper.getCroppedCanvas({
+                        width: 300,
+                        height: 400
+                    });
+
+                    canvas.toBlob((blob) => {
+                        const file = new File([blob], 'cropped_photo.png', {
+                            type: 'image/png'
+                        });
+                        const dataTransfer = new DataTransfer();
+                        dataTransfer.items.add(file);
+
+                        // Update photo input and preview
+                        const photoInput = document.getElementById('photoInput');
+                        photoInput.files = dataTransfer.files;
+
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            const placeholder = document.getElementById('photoPlaceholder');
+                            placeholder.innerHTML = '';
+                            const img = document.createElement('img');
+                            img.src = e.target.result;
+                            img.id = 'photoPreview';
+                            img.className = 'img-fluid rounded shadow';
+                            img.style.maxWidth = '100%';
+                            placeholder.appendChild(img);
+                            document.getElementById('removePhotoInput').value = '0';
+                        };
+                        reader.readAsDataURL(file);
+
+                        bootstrap.Modal.getInstance(document.getElementById('cropModal')).hide();
+                    });
                 }
             });
 
